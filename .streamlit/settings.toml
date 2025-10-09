@@ -1,0 +1,28 @@
+# settings.toml
+# プロジェクト名：command_station_app
+
+
+[env]
+# 利用する環境を選択:  "Home" / "Server / "Prec""
+location = "Home"
+
+
+# ===== 環境ごとのルート定義 =====
+
+
+# Home（Mac 運用環境（自宅））
+[locations.Home]
+project_root    = "/Users/macmini2025/projects/"
+
+# Prec（Mac 運用環境（Prec））
+[locations.Prec]
+project_root    = "/Users/macmini2025/projects/"
+
+# Server（サーバー環境）
+[locations.Server]
+project_root    = "/Users/macmini2025/projects/"
+
+# ===== 共通アプリ設定 =====
+[app]
+available_presets = [ "Home", "Prec", "Server"]
+
