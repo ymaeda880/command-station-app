@@ -36,7 +36,7 @@ def slugify(name: str) -> str:
 
 with st.expander("🆕 まずは新規プロジェクトとアプリのフォルダを作る（任意）", expanded=True):
     proj_input = st.text_input("プロジェクト名（例: sales-tools, ocr-viewer など）", key="txt_proj_name")
-    col_new = st.columns([1, 1, 2])
+    col_new = st.columns([1,1,2])
     with col_new[0]:
         create_btn = st.button("📁 `xxx_project/xxx_app` を作成", key="btn_create_project")
     with col_new[1]:
@@ -51,6 +51,7 @@ with st.expander("🆕 まずは新規プロジェクトとアプリのフォル
             app_dir.mkdir(parents=True, exist_ok=True)
 
             if make_skeleton:
+                # 軽い雛形（README は app 内に作成）
                 (app_dir / "README.md").write_text(
                     f"# {slug}_app\n\n"
                     f"- プロジェクトルート: `{project_dir}`\n"
@@ -58,12 +59,14 @@ with st.expander("🆕 まずは新規プロジェクトとアプリのフォル
                     encoding="utf-8"
                 )
 
+                # requirements.txt
                 (app_dir / "requirements.txt").write_text(
                     "# 必要なパッケージを1行ずつ記載してください\n"
                     "streamlit>=1.37\n",
                     encoding="utf-8"
                 )
 
+                # .gitignore（内容あり）
                 (app_dir / ".gitignore").write_text(
                     "# Python / Streamlit ignore rules\n"
                     ".venv/\n"
@@ -81,41 +84,52 @@ with st.expander("🆕 まずは新規プロジェクトとアプリのフォル
                     encoding="utf-8"
                 )
 
+                # Streamlit 最小ページ雛形
                 pages_dir = app_dir / "pages"
                 pages_dir.mkdir(exist_ok=True)
                 (app_dir / "app.py").write_text(
                     'import streamlit as st\n'
-                    f'st.set_page_config(page_title="{slug}_app", page_icon="🧪", layout="wide")\n'
-                    f'st.title("Hello from {slug}_app")\n',
+                    'st.set_page_config(page_title="'
+                    + f'{slug}_app'
+                    + '", page_icon="🧪", layout="wide")\n'
+                    'st.title("Hello from '
+                    + f'{slug}_app'
+                    + '")\n',
                     encoding="utf-8"
                 )
 
+                # .streamlit フォルダ & 設定ファイル
                 st_dir = app_dir / ".streamlit"
                 st_dir.mkdir(exist_ok=True)
+
+                # config.toml（指定どおり：port=9999（仮置き）, baseUrlPath="/xxx"）
                 (st_dir / "config.toml").write_text(
                     "# .streamlit/config.toml\n"
                     f"# プロジェクト名：{slug}_app\n\n"
                     "[server]\n"
                     "port = 9999\n"
                     'address = "0.0.0.0"\n'
-                    f'baseUrlPath = "/{slug}"\n'
+                    f'baseUrlPath = "/{slug}"\n'     # ← ★ ここを動的に変更！
                     "enableCORS = false\n"
                     "headless = true\n",
                     encoding="utf-8"
                 )
 
+                # settings.toml（指定どおりの中身）
                 (st_dir / "settings.toml").write_text(
                     "# settings.toml\n"
                     f"# プロジェクト名：{slug}_app\n",
                     encoding="utf-8"
                 )
 
+                # secrets.toml（1行コメントのみ）
                 (st_dir / "secrets.toml").write_text(
                     "# .streamlit/secrets.toml\n",
                     encoding="utf-8"
                 )
 
             st.success(f"✅ 作成しました: `{app_dir}`")
+            # 新しく作った _app を直ちにラジオに反映
             st.rerun()
         except Exception as e:
             st.error(f"❌ 作成に失敗しました: {type(e).__name__}: {e}")
@@ -134,24 +148,38 @@ def run(cmd: str | list[str], cwd: Path | None = None) -> tuple[int, str, str]:
         return 1, "", f"{type(e).__name__}: {e}"
 
 # -----------------------------
-# 対象フォルダ選択
+# 対象フォルダの指定UI（`.venv`未作成の_appをラジオで選択）
 # -----------------------------
 st.subheader("📂 対象フォルダを選択（`.venv` 未作成の `_app`）")
+
 apps = discover_apps(PROJECT_ROOT)
 no_venv_apps = [app for app in apps if not (app.app_path / ".venv").exists() and app.kind == "app"]
 
 if no_venv_apps:
-    options = ["（選択しない：手動入力を使う）"] + [str(a.app_path) for a in no_venv_apps]
-    selection = st.radio("以下から1つ選んでください", options=options, index=0, key="radio_no_venv_apps")
+    values = [str(a.app_path) for a in no_venv_apps]
+    options = ["（選択しない：手動入力を使う）"] + values
+    selection = st.radio(
+        "以下から1つ選んでください",
+        options=options,
+        index=0,
+        key="radio_no_venv_apps",
+        horizontal=False,
+    )
 else:
     st.success("✅ `.venv` 未作成の `_app` は見つかりませんでした。")
     selection = "（選択しない：手動入力を使う）"
 
 thick_divider("#007ACC", 2)
 
+# 手動入力フォールバック
 st.subheader("🖊️ 手動でパスを指定（任意）")
-target_path_str = st.text_input("フォルダパス（例）/Users/you/projects/your_project/your_app", value="", key="txt_manual_path")
+target_path_str = st.text_input(
+    "フォルダパス（例）/Users/you/projects/your_project/your_app",
+    value="",
+    key="txt_manual_path"
+)
 
+# 最終決定パスの決定ロジック
 if selection != "（選択しない：手動入力を使う）":
     final_path = Path(selection)
 elif target_path_str.strip():
@@ -172,7 +200,7 @@ if not final_path.exists() or not final_path.is_dir():
 thick_divider("#007ACC", 3)
 
 # -----------------------------
-# (1) 仮想環境の作成のみ
+# (1) 仮想環境の作成
 # -----------------------------
 st.subheader("① 仮想環境を作成する")
 st.caption("実行内容: `pyenv local 3.12.2` → `python -m venv .venv`")
@@ -186,9 +214,10 @@ with col_env[1]:
 with col_env[2]:
     st.caption("既存の .venv がある場合は上書きされません。")
 
-col_make = st.columns([1, 1])
-with col_make[0]:
+c1, c2 = st.columns([1,1])
+with c1:
     if st.button("🛠️ 仮想環境を作成（venv）", key="btn_make_venv"):
+        # 1) pyenv local 3.12.2（任意）
         if do_pyenv_local:
             code, out, err = run(["pyenv", "local", "3.12.2"], cwd=final_path)
             st.markdown("**pyenv local 3.12.2**")
@@ -196,6 +225,7 @@ with col_make[0]:
             if code != 0:
                 st.warning("pyenv の実行に失敗しました。pyenv未インストールの場合はこのチェックを外してください。")
 
+        # 2) python -m venv .venv
         code, out, err = run([py_cmd, "-m", "venv", ".venv"], cwd=final_path)
         st.markdown("**python -m venv .venv**")
         st.code(out or err or "(no output)", language="bash")
@@ -204,8 +234,49 @@ with col_make[0]:
         else:
             st.error("❌ 仮想環境の作成に失敗しました。")
 
-# with col_make[1]:
-#     if st.button("🧪 venv存在チェック", key="btn_check_venv"):
-#         venv_pip = final_path / ".venv" / "bin" / "pip"
-#         st.write(f"pip path: `{venv_pip}`")
-#         st.success("存在します。") if venv_pip.exists() else st.error("見つかりません。")
+with c2:
+    if st.button("🧪 venv存在チェック", key="btn_check_venv"):
+        venv_pip = final_path / ".venv" / "bin" / "pip"
+        st.write(f"pip path: `{venv_pip}`")
+        st.success("存在します。") if venv_pip.exists() else st.error("見つかりません。")
+
+thick_divider("#007ACC", 3)
+
+# ============================================================
+# （2）＆「まとめて実行」は削除し、ターミナル用のコピペコマンドを表示
+# ============================================================
+
+st.subheader("🖥️ ターミナルで手動実行（コピペ用）")
+st.caption("以下を **そのままコピー＆ペースト** して、お使いのターミナルで実行してください。")
+
+# パスにスペース等があっても安全にするため、ダブルクォートで括る
+quoted_path = f'"{final_path}"'
+
+# 4行構成の通常版
+shell_script = (
+    f"cd {quoted_path}\n"
+    f"source .venv/bin/activate\n"
+    f"pip install --upgrade pip\n"
+    f"pip install -r requirements.txt\n"
+)
+
+st.markdown("#### 🧩 複数行コマンド（順に実行）")
+st.code(shell_script, language="bash")
+
+# 🔸 コピーボタン干渉防止（区切りを入れる）
+st.markdown("&nbsp;", unsafe_allow_html=True)
+
+# 1行で && 連結した版（成功したら次を実行）
+one_liner = (
+    f"cd {quoted_path} && "
+    f"source .venv/bin/activate && "
+    f"pip install --upgrade pip && "
+    f"pip install -r requirements.txt"
+)
+
+st.markdown("#### ⚡ 1行コマンド（コピペ実行可）")
+st.code(one_liner, language="bash")
+
+
+# フッター
+st.caption("Tips: 上記の `source` は対話シェルのプロンプトに `(venv)` を表示します。表示を確認したら続けて pip コマンドを実行してください。")

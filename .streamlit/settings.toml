@@ -1,28 +1,45 @@
-# settings.toml
+# .streamlit/settings.toml
 # プロジェクト名：command_station_app
 
-
 [env]
-# 利用する環境を選択:  "Home" / "Server / "Prec""
+# 利用する環境を選択:  "Home" / "Portable" / "Server" / "Prec"
 location = "Home"
-
 
 # ===== 環境ごとのルート定義 =====
 
-
 # Home（Mac 運用環境（自宅））
 [locations.Home]
-project_root    = "/Users/macmini2025/projects/"
+project_root = "/Users/macmini2025/projects/"
+nginx_root   = "/opt/homebrew/etc/nginx"
+index_root   = "/Users/macmini2025/projects/apps_portal"
+server_name  = "_"
+user         = "macmini2025"       # ← 追加：nginx をこのユーザーで実行
+
+# Portable（Mac 運用環境（macbook））
+[locations.Portable]
+project_root = "/Users/maedamacpro/projects/"
+nginx_root   = "/opt/homebrew/etc/nginx"
+index_root   = "/Users/maedamacpro/projects/apps_portal"
+server_name  = "_"
+user         = "maedamacpro"       # ← 追加
 
 # Prec（Mac 運用環境（Prec））
 [locations.Prec]
-project_root    = "/Users/macmini2025/projects/"
+project_root = "/Users/macmini2025/projects/"
+nginx_root   = "/opt/homebrew/etc/nginx"
+index_root   = "/Users/macmini2025/projects/apps_portal"
+server_name  = ["aisv.prec.inst", "192.168.255.14", "localhost"]
+user         = "macmini2025"       # ← 追加
 
-# Server（サーバー環境）
+# Server（Linuxサーバー環境）
 [locations.Server]
-project_root    = "/Users/macmini2025/projects/"
+project_root = ""  # 未使用（サーバー構築前）
+nginx_root   = ""  # 未使用（サーバー構築前）
+index_root   = ""  # 未使用（サーバー構築前）
+server_name  = ["_"]  # 仮置き
+user         = "www-data"          # ← Linuxサーバー用に設定例
 
 # ===== 共通アプリ設定 =====
 [app]
-available_presets = [ "Home", "Prec", "Server"]
-
+# 利用可能な環境プリセット
+available_presets = [ "Home", "Portable", "Prec", "Server" ]

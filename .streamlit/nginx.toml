@@ -1,0 +1,32 @@
+# .streamlit/nginx.toml
+# プロジェクト名：command_station_app
+
+# ==========================================
+# Nginx 設定マッピング (for internal app server)
+# ==========================================
+
+# ---- 各アプリのポート定義 ----
+
+[bot]
+port = 8501
+enabled = true     # 起動対象
+
+[minutes]
+port = 8502
+enabled = true     # 起動対象
+
+[doc_manager]
+port = 8503
+enabled = true     # 起動対象
+
+[image_maker]
+port = 8504
+enabled = true     # 起動対象
+
+[command_station]
+port = 8505
+enabled = true     # 起動対象
+
+
+
+# enabled = false    # 今回は無効化

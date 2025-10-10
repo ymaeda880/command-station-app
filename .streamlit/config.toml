@@ -1,21 +1,10 @@
 # .streamlit/config.toml
+# プロジェクト名：command_station_app
+
 [server]
 port = 8505
 address = "0.0.0.0"
-baseUrlPath = "/command"
+baseUrlPath = "/command_station"
 enableCORS = false
 headless = true
 
-
-# 開発環境 (自分だけで使う場合)
-# [server]
-# port = 8501
-# address = "localhost"
-# headless = false
-
-# 社内LAN / サーバー環境 (他のPCからもアクセスする場合)
-# [server]
-# port = 8501
-# address = "0.0.0.0"
-# baseUrlPath = "/command"
-# headless = true
