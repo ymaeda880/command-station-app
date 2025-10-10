@@ -16,6 +16,8 @@ from lib.project_scan import apps_git_dataframe
 st.set_page_config(page_title="📁 走査＆Git操作", page_icon="📁", layout="wide")
 st.title("📁 プロジェクト走査 ＋ 🔧 Git 操作")
 
+st.warning("githubの内容との違いを調べるには，fetch --all --prune（一括Git操作）を先に行うこと")
+
 st.caption(
     "- `settings.toml` の location から **project_root** を取得\n"
     "- `*_project/` 直下の `*_app/`（かつ `app.py` を含む）を検出\n"
