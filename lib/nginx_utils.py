@@ -59,27 +59,34 @@ def _read_location_from_secrets() -> Optional[str]:
     """
     .streamlit/secrets.toml の [env].location を返す。
     - Streamlit 未導入/未起動でも例外は外に出さず None を返す。
-    - top-level "location" も互換として一応見る。
+    - 旧仕様 (トップレベル location) も互換として一応サポート。
     """
     try:
         import streamlit as st  # 遅延インポート
-        env_sec: Dict[str, Any] = {}
+
+        # --- 新仕様: [env].location ---
         try:
-            env_sec = dict(st.secrets.get("env", {}))  # type: ignore[arg-type]
+            env_block = st.secrets["env"]  # Secrets オブジェクト（Mapping 互換）
+            # Secrets は dict ではないことがあるので、get を安全に呼ぶ
+            loc = env_block.get("location") if hasattr(env_block, "get") else None
+            if isinstance(loc, str) and loc.strip():
+                return loc.strip()
         except Exception:
-            env_sec = {}
-        loc = env_sec.get("location")
-        if isinstance(loc, str) and loc.strip():
-            return loc.strip()
+            pass
+
+        # --- 旧仕様: トップレベル location (互換目的) ---
         try:
-            top_loc = st.secrets.get("location", None)  # type: ignore[attr-defined]
+            top_loc = st.secrets.get("location", None)
             if isinstance(top_loc, str) and top_loc.strip():
                 return top_loc.strip()
         except Exception:
             pass
+
     except Exception:
         pass
+
     return None
+
 
 
 def load_settings(settings_path: Path = SETTINGS_FILE) -> dict:
@@ -172,14 +179,27 @@ def make_backup(path: Path) -> Path:
 
 
 # ========= 生成（dry-run）関連 =========
+# ========= 生成（dry-run）関連 =========
 def generate_conf_dry_run(py_exe: str = None) -> Tuple[int, str]:
-    """tools/generate_nginx_conf.py を --dry-run で実行し、生成内容（stdout）を返す。"""
+    """tools/generate_nginx_conf.py を --dry-run で実行し、生成内容（純粋な stdout のみ）を返す。"""
     from sys import executable as sys_py
     py = py_exe or sys_py
     gen = Path("tools/generate_nginx_conf.py")
     if not gen.exists():
         return 1, f"生成スクリプトが見つかりません: {gen}"
-    return run_cmd([py, str(gen), "--dry-run"])
+
+    try:
+        p = subprocess.run(
+            [py, str(gen), "--dry-run"],
+            stdout=subprocess.PIPE,   # ← stdout だけ取る
+            stderr=subprocess.PIPE,   # ← 警告は無視（混ぜない）
+            text=True,
+            check=False,
+        )
+        return p.returncode, (p.stdout or "")
+    except Exception as e:
+        return 1, f"[Exception] {e}"
+
 
 
 def diff_current_vs_generated(current_text: str, generated_text: str) -> str:

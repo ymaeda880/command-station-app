@@ -6,16 +6,11 @@ nginx.conf 自動生成スクリプト（現行手動 nginx.conf の挙動に準
 入力:
   - .streamlit/nginx.toml     … アプリ名 → port / enabled のマッピング
   - .streamlit/settings.toml  … 環境プリセット（index_root, server_name, nginx_root, user 等）
+    ※ 読み込みは lib/nginx_utils.load_settings() を通じて行い、
+       `.streamlit/secrets.toml` の [env].location / 環境変数 を考慮する
 
 出力:
   - <nginx_root>/nginx.conf
-
-メモ:
-  - server_name は配列/文字列どちらも可
-  - location = /app → 301 /app/ リダイレクト（末尾スラ統一）
-  - proxy_pass は末尾スラなし（現行運用に合わせる）
-  - WebSocket/Forwarded/Buffering 等の共通ヘッダは現行に合わせて設定
-  - gzip/absolute_redirect/client_max_body_size/error_page も現行に合わせて設定
 """
 
 from __future__ import annotations
@@ -24,19 +19,27 @@ import argparse
 import shutil
 import sys
 
+# --- ここを追加 ---
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
     print("ERROR: Python 3.11+ が必要です（tomllib が見つかりません）。", file=sys.stderr)
     sys.exit(1)
 
-NGINX_TOML = Path(".streamlit/nginx.toml")
-SETTINGS_TOML = Path(".streamlit/settings.toml")
+# 🔧 追加：nginx_utils から設定ローダとパス解決を利用
+from lib.nginx_utils import load_settings, resolve_nginx_conf_path, SETTINGS_FILE
 
-# --- テンプレート（中括弧 {} はこのプレースホルダのために使用。locationブロックの {} は別でケアする） ---
+NGINX_TOML = Path(".streamlit/nginx.toml")
+
+# --- テンプレート ---
 HTTP_TEMPLATE = """# ===============================================
 # nginx.conf（AUTO-GENERATED — do not edit manually）
-# Generated from .streamlit/nginx.toml + .streamlit/settings.toml
+# Generated from .streamlit/nginx.toml + .streamlit/settings.toml(+secrets)
 # ===============================================
 
 {user_line}
@@ -95,7 +98,7 @@ http {
 }
 """
 
-# location ブロックは、Python 置換衝突を避けるために {{ }} で逃がしておき、後で { } に戻す
+# location ブロックは {{ }} を後で { } に戻す
 LOCATION_BLOCK = """        # ========================================================
         # {title}（Streamlit on :{port}）
         # ========================================================
@@ -109,7 +112,6 @@ LOCATION_BLOCK = """        # ==================================================
             proxy_buffering    off;
         }}
 """
-# ↑ LOCATION_BLOCK 内の {{ / }} は、render 後に .replace("{{","{").replace("}}","}") で“本来の {}”へ戻す
 
 TITLE_FALLBACKS = {
     "bot": "Bot アプリ",
@@ -131,18 +133,15 @@ def render_locations(apps: dict) -> str:
         port = cfg.get("port")
         if port is None:
             continue
-        enabled = cfg.get("enabled", True)
-        if not enabled:
+        if not cfg.get("enabled", True):
             continue
         title = TITLE_FALLBACKS.get(app_name, f"{app_name} アプリ")
-        # まずテンプレ文字列を .replace で埋める（.format は使わない）
         b = (
             LOCATION_BLOCK
             .replace("{title}", title)
             .replace("{prefix}", str(app_name))
             .replace("{port}", str(int(port)))
         )
-        # ここでテンプレ中の {{ と }} を単一の { / } に戻す（Nginx 構文の中括弧）
         b = b.replace("{{", "{").replace("}}", "}")
         blocks.append(b)
     return "\n".join(blocks).rstrip()
@@ -153,26 +152,20 @@ def build_body(settings: dict, apps: dict) -> str:
 
     index_root = Path(locs["index_root"]).as_posix()
     server_name_value = locs.get("server_name", "_")
-    # server_name は配列/文字列両対応
-    if isinstance(server_name_value, list):
-        server_name = " ".join(server_name_value)
-    else:
-        server_name = str(server_name_value or "_")
+    server_name = " ".join(server_name_value) if isinstance(server_name_value, list) else str(server_name_value or "_")
 
-    # 追加: 実行ユーザー（未指定ならコメント行）
     user_value = str(locs.get("user", "")).strip()
     user_line = f"user {user_value};" if user_value else "# user nobody;"
 
     location_blocks = render_locations(apps)
 
-    body = (
+    return (
         HTTP_TEMPLATE
         .replace("{user_line}", user_line)
         .replace("{index_root}", index_root)
         .replace("{server_name}", server_name)
         .replace("{location_blocks}", location_blocks)
     )
-    return body
 
 def write_out(path: Path, text: str, backup: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,23 +182,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-backup", action="store_true", help="既存 nginx.conf のバックアップを作らない")
     args = parser.parse_args(argv)
 
-    if not NGINX_TOML.exists() or not SETTINGS_TOML.exists():
-        print("ERROR: .streamlit/nginx.toml または .streamlit/settings.toml が見つかりません。", file=sys.stderr)
+    # 存在チェック
+    if not NGINX_TOML.exists():
+        print("ERROR: .streamlit/nginx.toml が見つかりません。", file=sys.stderr)
+        return 1
+    if not Path(SETTINGS_FILE).exists():
+        print(f"ERROR: {SETTINGS_FILE} が見つかりません。", file=sys.stderr)
         return 1
 
+    # ✅ ここが肝：secrets( [env].location ) / 環境変数 / settings を考慮して読込
+    settings = load_settings(Path(SETTINGS_FILE))
     apps = load_toml(NGINX_TOML)
-    settings = load_toml(SETTINGS_TOML)
 
-    # 出力先決定
-    loc_key = settings["env"]["location"]
-    nginx_root = Path(settings["locations"][loc_key]["nginx_root"])
-    out_path = nginx_root / "nginx.conf"
+    # 出力先決定（nginx_root + nginx.conf を厳密解決）
+    out_path = resolve_nginx_conf_path(settings)
 
     body = build_body(settings, apps)
 
     if args.dry_run:
-        # そのまま標準出力へ（差分プレビュー用）
-        sys.stdout.write(body)
+        # ★ Streamlit 警告を避けるため、stdout を明示的に flush / 書き込み限定
+        sys.stdout.buffer.write(body.encode("utf-8"))
+        sys.stdout.flush()
         return 0
 
     write_out(out_path, body, backup=(not args.no_backup))
