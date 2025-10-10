@@ -3,7 +3,7 @@
 
 [env]
 # 利用する環境を選択:  "Home" / "Portable" / "Server" / "Prec"
-location = "Home"
+# location = "Home"
 
 # ===== 環境ごとのルート定義 =====
 
