@@ -78,22 +78,22 @@ st.markdown("---")
 st.subheader("① Nginx を確認・起動")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    if st.button("🔎 構文チェック (nginx -t)", use_container_width=True):
+    if st.button("🔎 構文チェック (nginx -t)", width="stretch"):
         code, out = nginx_test(conf_path)
         (st.success if code == 0 else st.error)("構文チェック " + ("OK ✅" if code == 0 else "NG ❌"))
         st.code(out)
 with c2:
-    if st.button("▶️ 起動 (brew services start nginx)", use_container_width=True):
+    if st.button("▶️ 起動 (brew services start nginx)", width="stretch"):
         code, out = brew_start_nginx()
         (st.success if code == 0 else st.error)("Nginx 起動 " + ("OK ✅" if code == 0 else "NG ❌"))
         st.code(out)
 with c3:
-    if st.button("🔁 再起動 (brew services restart nginx)", use_container_width=True):
+    if st.button("🔁 再起動 (brew services restart nginx)", width="stretch"):
         code, out = brew_restart_nginx()
         (st.success if code == 0 else st.error)("Nginx 再起動 " + ("OK ✅" if code == 0 else "NG ❌"))
         st.code(out)
 with c4:
-    if st.button("🔄 reload (nginx -s reload)", use_container_width=True):
+    if st.button("🔄 reload (nginx -s reload)", width="stretch"):
         code, out = nginx_reload(conf_path)
         (st.success if code == 0 else st.error)("reload " + ("OK ✅" if code == 0 else "NG ❌"))
         st.code(out)
@@ -107,13 +107,13 @@ cA, cB = st.columns(2)
 with cA:
     st.markdown("**個別起動**")
     for sp in specs:
-        if st.button(f"🚀 起動 /{sp['name']} (:{sp['port']})", key=f"start_{sp['name']}", use_container_width=True):
+        if st.button(f"🚀 起動 /{sp['name']} (:{sp['port']})", key=f"start_{sp['name']}", width="stretch"):
             ok, msg = start_one_app(sp)
             (st.success if ok else st.error)(msg)
 
 with cB:
     st.markdown("**一括起動**")
-    if st.button("🚀 全アプリ起動（enabled=true）", type="primary", use_container_width=True):
+    if st.button("🚀 全アプリ起動（enabled=true）", type="primary", width="stretch"):
         results = []
         for sp in specs:
             ok, msg = start_one_app(sp)
@@ -126,7 +126,7 @@ with cB:
 
 # ========== (3) ブラウザで動作確認 ==========
 st.subheader("③ ブラウザでポータルを確認（/ を開く）")
-if st.button("🌐 ポータルを開く（/）", use_container_width=True):
+if st.button("🌐 ポータルを開く（/）", width="stretch"):
     try:
         open_browser_to_root()
         st.success("ブラウザで http://localhost/ を開きました ✅")
@@ -218,18 +218,24 @@ for sp in specs:
         "command": cmd[:140] + ("…" if len(cmd) > 140 else ""),
     })
 
+import pandas as pd
+
 # 表示
 if rows:
-    st.dataframe(
-        rows,
-        use_container_width=True
-    )
+    # DataFrame化して Arrow エラー対策
+    df = pd.DataFrame(rows)
+
+    # pid列をすべて文字列化（Noneや数値混在の対策）
+    if "pid" in df.columns:
+        df["pid"] = df["pid"].astype(str)
+
+    st.dataframe(df, width="stretch")  # ← use_container_width → width に変更済み
 else:
     st.info("表示するアプリがありません。")
 
 cR1, cR2 = st.columns([1,3])
 with cR1:
-    if st.button("🔄 再スキャン", use_container_width=True):
+    if st.button("🔄 再スキャン", width="stretch"):
         st.rerun()
 with cR2:
     st.caption("検出順序: pidfile → port（lsof）。pidfile が壊れている場合は削除してください。")
@@ -243,13 +249,42 @@ cS, cT = st.columns(2)
 with cS:
     st.markdown("**個別停止**")
     for sp in specs:
-        if st.button(f"🛑 停止 /{sp['name']} (:{sp['port']})", key=f"stop_{sp['name']}", use_container_width=True):
+        if st.button(f"🛑 停止 /{sp['name']} (:{sp['port']})", key=f"stop_{sp['name']}", width="stretch"):
             ok, msg = stop_one_app(sp)
             (st.success if ok else st.error)(msg)
 
 with cT:
-    st.markdown("**一括停止**")
-    if st.button("🛑 全アプリ停止（enabled=true）", type="secondary", use_container_width=True):
+    st.markdown("**一括停止（安全版）**")
+    if st.button("🛑 /command_station (:8505) 以外を全部停止", key="stop_all_except_cs", type="secondary", width="stretch"):
+        results = []
+        skipped  = []
+
+        for sp in specs:
+            # 「command_station :8505」を停止対象から除外
+            if sp.get("name") == "command_station" or sp.get("port") == 8505:
+                skipped.append(f"/{sp['name']} (:{sp['port']})")
+                continue
+
+            ok, msg = stop_one_app(sp)
+            results.append((ok, msg))
+
+        if not results:
+            st.info("停止対象アプリがありません。")
+        elif all(ok for ok, _ in results):
+            st.success("command_station 以外は停止：OK ✅")
+        else:
+            st.warning("一部アプリで停止に失敗しました。")
+
+        # ログをまとめて表示（停止結果＋スキップ情報）
+        lines = [m for _, m in results]
+        if skipped:
+            lines.append("")
+            lines.append("== Skipped (not stopped) ==")
+            lines.extend(skipped)
+        st.code("\n".join(lines))
+
+    st.markdown("**一括停止（全て）**")
+    if st.button("🛑 全アプリ停止（enabled=true）", key="stop_all_enabled", type="secondary", width="stretch"):
         results = []
         for sp in specs:
             ok, msg = stop_one_app(sp)
@@ -260,8 +295,9 @@ with cT:
             st.warning("一部アプリで停止に失敗しました。")
         st.code("\n".join(m for _, m in results))
 
+
 st.markdown("")
-if st.button("⏹️ Nginx 停止 (brew services stop nginx)", use_container_width=True):
+if st.button("⏹️ Nginx 停止 (brew services stop nginx)", width="stretch"):
     code, out = brew_stop_nginx()
     (st.success if code == 0 else st.error)("Nginx 停止 " + ("OK ✅" if code == 0 else "NG ❌"))
     st.code(out)

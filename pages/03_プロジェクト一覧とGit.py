@@ -16,16 +16,32 @@ from lib.project_scan import apps_git_dataframe
 st.set_page_config(page_title="📁 走査＆Git操作", page_icon="📁", layout="wide")
 st.title("📁 プロジェクト走査 ＋ 🔧 Git 操作")
 
-st.warning("githubの内容との違いを調べるには，fetch --all --prune（一括Git操作）を先に行うこと")
+st.warning("GitHubとの差分を見る前に、まず『🌿 fetch --all --prune』を実行してください（リモート参照の整理）")
 
 st.caption(
     "- `settings.toml` の location から **project_root** を取得\n"
     "- `*_project/` 直下の `*_app/`（かつ `app.py` を含む）を検出\n"
     "- さらに `apps_portal/` も Git 対象に含める\n"
-    "- 一覧で Git ステータスを表示 → 選択に対して一括操作（fetch/pull/push/commit/init）"
+    "- 一覧で Git ステータスを表示 → 選択に対して一括操作（fetch/pull/push/commit/init/clone）"
 )
-
 st.info(f"現在の project_root: `{PROJECT_ROOT}`")
+
+# ------------------------------------------------------------
+# 0) ユーティリティ
+# ------------------------------------------------------------
+def _dir_is_effectively_empty(path: Path) -> bool:
+    """
+    clone 先の中身が「実質的に空」か判定。
+    許容: .DS_Store / .gitkeep / .venv / .run / __pycache__
+    それ以外があれば NG（安全のため）
+    """
+    allowed = {".DS_Store", ".gitkeep", ".venv", ".run", "__pycache__"}
+    if not path.exists():
+        return True
+    for p in path.iterdir():
+        if p.name not in allowed:
+            return False
+    return True
 
 # ------------------------------------------------------------
 # 1) プロジェクト走査＋Git情報取得
@@ -153,7 +169,7 @@ col = st.columns(3)
 
 # 🌿 fetch
 with col[0]:
-    if st.button("🌿 fetch --all --prune（選択分）", key="btn_fetch_main"):
+    if st.button("🌿 fetch --all --prune（選択分）", key="btn_fetch_main", help="全リモートの参照を更新＋不要な追跡ブランチを削除"):
         if not git_targets:
             st.warning("⚠️ Git リポジトリが選択されていません。")
         else:
@@ -193,48 +209,54 @@ if st.button("🔁 Git ステータスを更新", key="btn_reload_status"):
     st.rerun()
 
 # ------------------------------------------------------------
-# 6) git clone（新規取得）
+# 6) 🧲 git clone（新規取得：選択対象“の中身”に clone）
 # ------------------------------------------------------------
 thick_divider("#007ACC", 4)
-st.subheader("🧲 git clone（新規取得）")
+st.subheader("🧲 git clone（新規取得：選択対象フォルダの**中に** `.` で clone）")
 
-with st.form("clone_form", clear_on_submit=False):
-    clone_url = st.text_input("リポジトリURL", placeholder="https://github.com/user/repo.git", key="txt_clone_url")
-    dest_parent = st.text_input("保存先フォルダ（親）", value=str(PROJECT_ROOT), key="txt_clone_parent")
-    folder_name = st.text_input("作成するフォルダ名（任意。空なら自動）", value="", key="txt_clone_dir")
-    shallow = st.checkbox("--depth 1（浅い履歴）", value=False, key="chk_clone_depth")
-    submodules = st.checkbox("--recurse-submodules", value=False, key="chk_clone_sub")
-    run_clone = st.form_submit_button("🧲 clone を実行")
+with st.form("clone_into_selected_form", clear_on_submit=False):
+    st.caption("※ 保存先は **選択済みの1件** の `_app` ディレクトリです。フォルダ名は常に「.」で、**中身に** clone します。")
+    clone_url2 = st.text_input("リポジトリURL", placeholder="https://github.com/user/repo.git", key="txt_clone_url2")
+    shallow2 = st.checkbox("--depth 1（浅い履歴）", value=False, key="chk_clone_depth2")
+    submodules2 = st.checkbox("--recurse-submodules", value=False, key="chk_clone_sub2")
+    run_clone2 = st.form_submit_button("🧲 選択先に clone（フォルダ名は「.」）")
 
-if run_clone:
-    if not clone_url.strip():
+if run_clone2:
+    if len(sel) != 1:
+        st.error("clone は操作対象を **ちょうど1件** 選択して実行してください。")
+    elif not clone_url2.strip():
         st.error("リポジトリURLを入力してください。")
     else:
-        parent = Path(dest_parent).expanduser()
-        if not parent.exists():
-            st.error("保存先フォルダ（親）が存在しません。")
-        else:
-            extra = []
-            if shallow:
-                extra += ["--depth", "1", "--no-single-branch"]
-            if submodules:
-                extra += ["--recurse-submodules"]
+        rec = sel[0]
+        dest_dir = Path(rec["path"])  # 例: <project_root>/<app>_project/<app>_app
+        git_dir = dest_dir / ".git"
 
-            if folder_name.strip():
-                target_dir = parent / folder_name.strip()
-                if target_dir.exists():
-                    st.error(f"作成先が既に存在します: {target_dir}")
-                else:
-                    cmd = " ".join(["clone"] + extra + [shlex.quote(clone_url), shlex.quote(str(target_dir))])
-                    code, out, err = git(cmd, cwd=parent)
-                    st.code(out or err or "(no output)", language="bash")
-                    st.success(f"✅ clone 完了: {target_dir}") if code == 0 else st.error("❌ clone に失敗しました。")
+        # 既に Git 管理なら clone しない
+        if git_dir.exists():
+            st.error(f"既に Git リポジトリです: {dest_dir}")
+        else:
+            # 中身が実質空かチェック
+            if not _dir_is_effectively_empty(dest_dir):
+                st.error(
+                    f"フォルダが空ではありません: {dest_dir}\n"
+                    "→ ファイルを退避/削除するか、『新規リポジトリ初期化』機能をご利用ください。"
+                )
             else:
-                # フォルダ名未指定：git に任せて自動作成
-                cmd = " ".join(["clone"] + extra + [shlex.quote(clone_url)])
-                code, out, err = git(cmd, cwd=parent)
+                extra = []
+                if shallow2:
+                    extra += ["--depth", "1", "--no-single-branch"]
+                if submodules2:
+                    extra += ["--recurse-submodules"]
+
+                cmd = " ".join(["clone"] + extra + [shlex.quote(clone_url2), "."])
+                code, out, err = git(cmd, cwd=dest_dir)
                 st.code(out or err or "(no output)", language="bash")
-                st.success("✅ clone 完了") if code == 0 else st.error("❌ clone に失敗しました。")
+                if code == 0:
+                    st.success(f"✅ clone 完了: {clone_url2} → {dest_dir}（フォルダ名は『.』）")
+                    # 念のためサブモジュールを最新化
+                    git("submodule update --init --recursive", cwd=dest_dir)
+                else:
+                    st.error("❌ clone に失敗しました。ログを確認してください。")
 
 # ------------------------------------------------------------
 # 7) 新規リポジトリ初期化
@@ -255,7 +277,7 @@ with col_init[1]:
 with col_init[2]:
     auto_commit = st.checkbox("初回 commit も行う", value=False, key="chk_auto_commit")
 
-if st.button("🚀 git init を実行（選択分）", use_container_width=True, key="btn_git_init"):
+if st.button("🚀 git init を実行（選択分）", key="btn_git_init", help="まだ Git 管理でないフォルダを初期化します", kwargs={"use_container_width": False}):
     init_targets = [r for r in sel if not r["is_repo"]]
     if not sel:
         st.error("対象フォルダが選択されていません。")
@@ -271,9 +293,9 @@ if st.button("🚀 git init を実行（選択分）", use_container_width=True,
             st.code(out or err or "(no output)", language="bash")
 
             # .gitignore 自動作成
-            gitignore_path = repo_path / ".gitignore"
-            if not gitignore_path.exists():
-                gitignore_path.write_text(".venv/\n__pycache__/\n.DS_Store\n")
+            gi = repo_path / ".gitignore"
+            if not gi.exists():
+                gi.write_text(".venv/\n__pycache__/\n.DS_Store\n")
                 st.info(".gitignore を自動作成しました。")
 
             if remote_url.strip():
