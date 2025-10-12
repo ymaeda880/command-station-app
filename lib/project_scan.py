@@ -147,6 +147,18 @@ def discover_apps(project_root: Path = PROJECT_ROOT) -> List[AppDir]:
             )
         )
 
+    # common_lib も対象に含める
+    shared = project_root / "common_lib"
+    if shared.exists() and shared.is_dir():
+        results.append(
+            AppDir(
+                name="common_lib",
+                app_path=shared,
+                project_path=shared,
+                kind="lib",   # ← 種別は好きに（"shared" / "lib" など）
+            )
+        )
+
     return results
 
 
