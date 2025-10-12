@@ -2,7 +2,7 @@
 # プロジェクト名：command_station_app
 
 [server]
-port = 8505
+port = 8590
 address = "0.0.0.0"
 baseUrlPath = "/command_station"
 enableCORS = false

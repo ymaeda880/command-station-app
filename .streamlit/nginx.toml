@@ -23,8 +23,13 @@ enabled = true     # 起動対象
 port = 8504
 enabled = true     # 起動対象
 
+[slide_viewer]
+port = 8506
+enabled = true     # 起動対象
+
+
 [command_station]
-port = 8505
+port = 8590
 enabled = true     # 起動対象
 
 

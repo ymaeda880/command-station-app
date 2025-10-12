@@ -22,8 +22,60 @@ st.markdown("""
             
 ---
 
-使用方法
+使用方法（projectの作成）
 ---
+
+**新たにprojectを作成するとき**
+
+1. [python仮想環境構築]で，アプリのフォルダを作る（READMEなども同時作成）
+1. [python仮想環境構築]で，仮想環境を構築
+            
+**git cloneするprojectを作成するとき**            
+1. [python仮想環境構築]で，アプリのフォルダを作る（READMEなどは作成しない）
+1. [プロジェクト一覧とGit]でgit clone
+1. [python仮想環境構築]で，仮想環境を構築
+1. [インストール用コマンド] install実行
+
+使用方法（projectのデプロイ）
+---
+
+portは8501~8599
+                       
+1. nginx.confの作成の準備
+            
+nginx.tmol（command_station_app）の設定
+
+---- 各アプリのポート定義（nginx.confの作成） ----
+
+```
+[bot]
+port = 8501
+enabled = true     # 起動対象
+```
+
+2. config.toml（各アプリ）の設定
+
+```        
+# .streamlit/config.toml
+# プロジェクト名：command_station_app
+
+[server]
+port = 8505
+address = "0.0.0.0"
+baseUrlPath = "/command_station"
+enableCORS = false
+headless = true
+```
+
+3. index.htmlの設定
+
+
+
+
+
+一般的な操作
+---
+            
 - アプリケーションフォルダーの作成
             
 プロジェクトフォルダーを作成しその中にアプリケーションフォルダーを作成する．

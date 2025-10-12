@@ -20,6 +20,8 @@ st.caption(
 )
 st.info(f"現在の project_root: `{PROJECT_ROOT}`")
 
+st.warning("git cloneを行う時は，READMEやrequirements.txtなどを作成しない")
+
 # ============================================================
 # 0) 新規プロジェクト雛形の作成: xxx → PROJECT_ROOT/xxx_project/xxx_app
 # ============================================================
@@ -40,7 +42,7 @@ with st.expander("🆕 まずは新規プロジェクトとアプリのフォル
     with col_new[0]:
         create_btn = st.button("📁 `xxx_project/xxx_app` を作成", key="btn_create_project")
     with col_new[1]:
-        make_skeleton = st.checkbox("README と requirements.txt を同時作成", value=True, key="chk_skeleton")
+        make_skeleton = st.checkbox("README や requirements.txt などを同時作成", value=True, key="chk_skeleton")
 
     if create_btn:
         slug = slugify(proj_input or "")
