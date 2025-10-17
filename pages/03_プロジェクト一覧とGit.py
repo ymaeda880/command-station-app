@@ -44,7 +44,17 @@ def _dir_is_effectively_empty(path: Path) -> bool:
     return True
 
 # ------------------------------------------------------------
-# 1) プロジェクト走査＋Git情報取得
+# 5) ステータス再読み込み（サイドバーへ移動）
+# ------------------------------------------------------------
+with st.sidebar:
+    st.markdown("### 🔁 Git ステータス")
+    st.caption("Git の変更を再読み込みします。いつでも実行できます。")
+
+    if st.button("🔁 ステータスを更新", key="btn_reload_status_sidebar"):
+        st.rerun()
+
+# ------------------------------------------------------------
+# 1) プロジェクト走査＋Git情報取得（.gitサイズ表示対応版）
 # ------------------------------------------------------------
 df = apps_git_dataframe(PROJECT_ROOT)
 
@@ -52,8 +62,9 @@ if df.empty:
     st.warning("対象フォルダが見つかりませんでした。`*_project` / `*_app` / `apps_portal` を確認してください。")
     st.stop()
 
-st.subheader("🔎 検出結果 & ステータス")
+st.subheader("🔎 検出結果 & ステータス（.git サイズ付き）")
 
+# 表示名へリネーム
 df_display = df.rename(columns={
     "name": "名前",
     "path": "パス",
@@ -63,13 +74,37 @@ df_display = df.rename(columns={
     "ahead": "↑ ahead",
     "behind": "↓ behind",
     "is_repo": "Git管理",
+    "git_size_human": ".git サイズ",
+    "git_size_bytes": ".git サイズ(byte)",
 })
-st.dataframe(df_display.drop(columns=["short_status"]), width="stretch")
+
+# 表示したい列の順序（short_status は詳細枠で出すので一覧からは外す）
+cols = ["名前", "種別", "ブランチ", "変更数", "↑ ahead", "↓ behind", "Git管理", ".git サイズ", "パス"]
+# 安全に存在チェックして不足列を除外
+cols = [c for c in cols if c in df_display.columns]
+
+# 一覧テーブル表示（横幅フィット）
+st.dataframe(df_display[cols], use_container_width=True)
+
+# 合計サイズのサマリ（任意）
+if "git_size_bytes" in df.columns:
+    total_bytes = int(df["git_size_bytes"].sum())
+    # 人間可読の整形（apps側の関数に合わせた軽量版）
+    def _fmt(n: int) -> str:
+        size = float(n)
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if size < 1024.0 or unit == "TB":
+                return (f"{size:.0f} {unit}" if unit == "B" else f"{size:.2f} {unit}")
+            size /= 1024.0
+        return f"{size:.2f} TB"
+
+    st.caption(f"`.git` の合計サイズ：**{_fmt(total_bytes)}**（{total_bytes:,} bytes）")
 
 with st.expander("各リポジトリの `git status -sb` 出力（詳細）", expanded=False):
     for _, rec in df.iterrows():
-        st.markdown(f"**{rec['name']}** — `{rec['path']}`")
+        st.markdown(f"**{rec['name']}** — `{rec['path']}`  —  `.git`: {rec.get('git_size_human', '0 B')}")
         st.code(rec["short_status"], language="bash")
+
 
 # ------------------------------------------------------------
 # 💬 Git ステータス記号の意味（ヘルプ折りたたみ）
@@ -165,6 +200,59 @@ if submitted:
 thick_divider("#007ACC", 4)
 st.subheader("🛠️ 一括 Git 操作")
 
+with st.expander("🧩 一括 Git 操作の説明（fetch / pull / push）", expanded=False):
+    st.markdown(
+    """
+    ### 🛠️ 一括 Git 操作の概要
+
+    このセクションでは、選択された複数のリポジトリに対して  
+    **共通の Git コマンドを一括実行** します。  
+    各ボタンはそれぞれ以下のような動作を行います。
+
+    ---
+
+    #### 🌿 `fetch --all --prune（選択分）`
+    - すべてのリモートリポジトリ（例：GitHub上の origin）の参照情報を更新します。  
+      例：`git fetch --all`
+    - さらに `--prune` により、削除済みリモートブランチの追跡情報をローカルからも削除します。
+    - リモート追跡ブランチ一覧を最新化する処理です。  
+      コードやファイルの内容には影響しません。
+
+    ---
+
+    #### ⬇️ `pull（選択分）`
+    - リモートから最新の変更を取得し、ローカルブランチへ統合します。  
+      実際には `git pull`（＝`fetch + merge`）を実行しています。
+    - 競合が発生する場合はエラー表示されるため、  
+      状況に応じて手動解決または `stash` などが必要になります。
+    - コマンド出力（またはエラー内容）はコンソール風に表示されます。
+
+    ---
+
+    #### ⬆️ `push（選択分）`
+    - ローカルでの最新コミットをリモートブランチへ反映します。  
+      実際には `git push` を実行します。
+    - すでに上流ブランチが設定済み（`-u`不要）の場合に使います。
+    - 成功するとリモートリポジトリ（GitHub 等）へコードが反映されます。
+
+    ---
+
+    #### ⚙️ 共通仕様
+    - どの操作も「選択された Git リポジトリ（`git_targets`）」が対象です。  
+      何も選択されていない場合は警告を表示して実行しません。
+    - 各リポジトリごとに結果（標準出力 or エラー）を `st.code()` で整形して表示します。
+    - `thick_divider("#007ACC", 4)` により、セクションを視覚的に区切っています。
+
+    ---
+    **💡ヒント：**
+    - `fetch` は安全な更新（リモート同期のみ）  
+    - `pull` はローカルへ反映  
+    - `push` はリモートへ送信  
+    という方向の違いを意識すると運用が分かりやすくなります。
+    """
+    )
+
+
 col = st.columns(3)
 
 # 🌿 fetch
@@ -203,10 +291,10 @@ with col[2]:
 # ------------------------------------------------------------
 # 5) ステータス再読み込み
 # ------------------------------------------------------------
-thick_divider("#007ACC", 4)
-st.caption("Gitの変更を反映させます．いつでも実行できます．")
-if st.button("🔁 Git ステータスを更新", key="btn_reload_status"):
-    st.rerun()
+# thick_divider("#007ACC", 4)
+# st.caption("Gitの変更を反映させます．いつでも実行できます．")
+# if st.button("🔁 Git ステータスを更新", key="btn_reload_status"):
+#     st.rerun()
 
 # ------------------------------------------------------------
 # 6) 🧲 git clone（新規取得：選択対象“の中身”に clone）
@@ -263,6 +351,71 @@ if run_clone2:
 # ------------------------------------------------------------
 thick_divider("#007ACC", 4)
 st.subheader("🆕 新規 Git リポジトリ初期化 ➜ 初回push")
+
+with st.expander("🧩 処理の内容を表示", expanded=False):
+    st.markdown(
+    """
+    ### 🧩 処理の内容
+
+    #### 🆕 ⑦ 新規 Git リポジトリ初期化
+    1. **選択されたフォルダを確認**  
+       - Git 管理されていないフォルダだけを抽出します。  
+       - フォルダが未選択・既に Git 管理済み・実行許可チェック未ON の場合は実行しません。
+
+    2. **Git 初期化 (`git init`) の実行**  
+       - 各フォルダで `git init` を実行して `.git` ディレクトリを作成します。  
+       - 実行結果を画面に表示します。
+
+    3. **`.gitignore` の自動作成**  
+       - `.gitignore` が存在しない場合は自動生成します。  
+         ```
+         .venv/
+         __pycache__/
+         .DS_Store
+         ```
+
+    4. **リモートリポジトリの設定（任意）**  
+       - 入力された URL があれば  
+         `git remote add origin <URL>` を実行します。
+
+    5. **初回コミットの実行（任意）**  
+       - 「初回 commit も行う」にチェックがある場合、  
+         `git add .` → `git commit -m 'Initial commit'` を自動実行します。
+
+    6. **完了メッセージの表示**  
+       - 各処理完了後に結果を表示し、必要に応じて push を促します。
+
+    ---
+
+    #### 🚀 ⑧ 初回 push（上流ブランチを設定）
+
+    1. **対象リポジトリを確認**  
+       - `git_targets` に選択された Git 管理済みフォルダを取得します。  
+       - 未選択の場合はエラーを表示します。
+
+    2. **上流ブランチの確認**  
+       - 各リポジトリで `git rev-parse --abbrev-ref --symbolic-full-name @{u}` を実行。  
+       - すでに上流ブランチ（upstream）が設定済みなら `git push` は不要と判断してスキップ。
+
+    3. **上流未設定の場合の push 処理**  
+       - `push -u` または `push --set-upstream` オプション付きで初回 push を実行します。  
+       - `-u` により「現在のブランチ」とリモートブランチの対応関係を登録します。  
+         次回以降は `git push` だけで送信可能になります。
+
+    4. **ブランチ指定ロジック**  
+       - 「現在のブランチ（HEAD）にpush」チェックがオンなら  
+         `git push -u origin HEAD`  
+       - チェックがオフなら、現在のブランチ名（例：`main`）を明示して  
+         `git push -u origin main` を実行。
+
+    5. **結果出力**  
+       - コマンド出力またはエラー内容を `st.code()` で表示します。  
+       - 正常に完了すると、今後は通常の `git push` で同期できます。
+    """
+    )
+
+
+
 st.markdown("#### 🆕 新規 Git リポジトリ初期化（選択分）")
 
 col_init = st.columns([1, 2, 2])
@@ -342,11 +495,65 @@ if st.button("初回 push を実行（選択分）", key="btn_first_push"):
             code, out, err = git(cmd, cwd=rec["path"])
             st.code(out or err or "(no output)", language="bash")
 
+
+
+
+
 # ------------------------------------------------------------
 # 9) 💣 強制リセット（選択分）
 # ------------------------------------------------------------
 thick_divider("#ff4d4f", 3)
 st.subheader("💣 強制リセット（選択分）")
+
+with st.expander("💣 強制リセット（何が起きる？安全確認ポイント）", expanded=False):
+    st.markdown(
+    """
+    ### 💣 強制リセットとは？
+    選択した各リポジトリの **現在ブランチ** を、リモート（`origin/<branch>`）の最新状態に
+    **完全一致（hard reset）** させます。  
+    その結果、以下が起こります。
+
+    - ✅ **リモートの最新状態に完全同期**（ファイル内容・履歴位置が一致）
+    - ❌ **未コミットの変更（ワーキングツリー/ステージング）は消えます**
+    - ❌ **ローカルだけにあるコミット（push していないコミット）は履歴から外れます**
+      - ※ ただし *多くの場合* `git reflog` から一定期間は復旧可能です（上級者向け）
+
+    > 🔴 **注意**：`git reset --hard` は “追跡ファイル” をリモートの状態に上書きします。  
+    > 未追跡ファイル（untracked）は原則残りますが、確実ではありません。  
+    > 未追跡まで掃除するのは `git clean -fd`（本UIでは実行しません）。
+
+    ---
+
+    ### 実行前チェック
+    1. 本当にローカルの未コミット変更や未pushコミットを捨てて良いか？
+    2. 重要な変更がある場合は **stash** または **一時ブランチ/タグ** で退避を
+       - 例）`git stash -u` / `git branch backup/<日付>` / `git tag pre-reset-YYYYMMDD`
+    3. `origin` が設定されているか（無ければ本処理はスキップされます）
+
+    ---
+
+    ### このボタンが内部で実行するコマンド
+    1. `git fetch origin`  
+       リモートの最新状態を取得（ファイルは変えない）
+    2. `git reset --hard origin/<branch>`  
+       取得したリモートの状態に **強制的に一致** させる  
+       - `<branch>` は **現在のブランチ**（無ければ `main` を自動使用）
+
+    ---
+
+    ### 失敗/スキップ条件
+    - `origin` が未設定 → **エラー表示**してスキップ（`git remote add origin ...` が必要）
+    - fetch 失敗／reset 失敗 → **ログ出力**し、結果に応じて成功/失敗を表示
+
+    ---
+
+    ### 実行後
+    - テーブルの状態更新には、**サイドバーの『🔁 ステータスを更新』** を使ってください
+    - 誤って消したコミットは、可能なら `git reflog` から復旧を試みてください（高度）
+    """
+    )
+
+
 st.caption(
     "各リポジトリを **リモートの最新状態に完全一致** させます。"
     " ローカルの未コミット変更や push していないコミットは失われます。"
@@ -392,5 +599,135 @@ if st.button("💥 強制リセットを実行（選択分）", key="btn_force_r
                 st.success(f"✅ {repo_name}: origin/{branch} に強制同期しました。")
             else:
                 st.error(f"❌ {repo_name}: リセットに失敗しました。ログを確認してください。")
+
+        st.info("🔁 必要なら『ステータス再読み込み』ボタンで最新状態を反映してください。")
+
+# ------------------------------------------------------------
+# 10) 🧨 完全再初期化（履歴全消去・現スナップショットのみ）
+# ------------------------------------------------------------
+import shutil  # ← 追加
+
+thick_divider("#faad14", 3)
+st.subheader("🧨 完全再初期化（履歴全消去・現スナップショットのみ）")
+
+with st.expander("🧨 これは何をする？（安全確認ポイント）", expanded=False):
+    st.markdown(
+    """
+    ### 🧨 完全再初期化とは？
+    選択した各リポジトリの **`.git` ディレクトリを削除**し、`git init` からやり直します。  
+    つまり **過去の履歴はすべて消え**、**今の作業ツリーだけ**を最初の1コミットとして新規作成します。
+
+    - ✅ 現在のファイル状態だけを初期コミット化
+    - ❌ すべての過去履歴・タグ・ブランチは消えます（新しい履歴になります）
+    - 🔁 既存の `origin` があれば再設定して **--force** で上書き push 可能（GitHubも再初期化されます）
+
+    > 🔴 **注意**：共有リポジトリを上書きする場合は **チーム周知必須**。  
+    > 協力者は基本 **re-clone** が必要です。  
+    > GitHub のブランチ保護がある場合、いったん解除してください。
+
+    ---
+
+    ### 💡 clone し直す方法（リモートを完全に再取得したい場合）
+
+    #### 同じフォルダ内でやり直す（`.git`だけ削除）
+    ```bash
+    rm -rf .git
+    git init
+    git remote add origin https://github.com/ユーザー名/リポジトリ名.git
+    git fetch origin
+    git checkout main
+    ```
+    - フォルダやファイルを残したまま、Git管理だけを再初期化。
+    - 作業中のファイルを保ちたい場合はこちらが安全。
+
+    #### 💣 最も確実な方法（フォルダごと削除して再clone）
+    ```bash
+    cd ..
+    rm -rf リポジトリ名
+    git clone https://github.com/ユーザー名/リポジトリ名.git
+    ```
+    - フォルダ全体を削除し、リモートの最新状態を完全に再取得。
+    - `.git`, `.gitattributes`, `.gitignore` なども全てリセットされます。
+    - Force push や履歴リセット後は **この方法が最も確実でクリーン**。
+    """
+    )
+
+
+col_reinit = st.columns([2, 2, 3, 3])
+with col_reinit[0]:
+    really_reinit = st.checkbox("実行内容を理解した（履歴は全消去）", key="chk_really_reinit")
+with col_reinit[1]:
+    confirm_reinit = st.text_input("確認のため `REINIT` と入力", "", key="txt_reinit_confirm")
+with col_reinit[2]:
+    remote_url_input = st.text_input("（任意）リモートURL（未指定なら既存originを再利用）", "", key="txt_reinit_remote")
+with col_reinit[3]:
+    branch_name = st.text_input("ブランチ名", "main", key="txt_reinit_branch")
+
+col_opts = st.columns([2, 2, 3])
+with col_opts[0]:
+    do_force_push = st.checkbox("終了後に --force で push する", value=False, key="chk_reinit_force_push")
+with col_opts[1]:
+    keep_tags = st.checkbox("タグは再作成しない（推奨）", value=True, key="chk_reinit_keep_tags")
+with col_opts[2]:
+    st.caption("※ `.gitattributes`/`.gitignore` は作業ツリーにあればそのまま残ります。")
+
+if st.button("🧨 再初期化を実行（選択分）", key="btn_git_reinit"):
+    if not git_targets:
+        st.warning("⚠️ Git リポジトリが選択されていません。")
+    elif not really_reinit or confirm_reinit.strip().upper() != "REINIT":
+        st.error("確認が未完了です。『実行内容を理解した』にチェックし、`REINIT` と入力してください。")
+    else:
+        for rec in git_targets:
+            repo_path = Path(rec["path"])
+            repo_name = rec["name"]
+            st.markdown(f"**{repo_name}** — `{repo_path}`")
+
+            # 事前に既存の origin を記録（入力が空なら再利用）
+            code_remote, out_remote, _ = git("remote get-url origin", cwd=repo_path)
+            existing_origin = out_remote.strip() if code_remote == 0 and out_remote else ""
+            use_remote = remote_url_input.strip() or existing_origin
+
+            # 1) .git を削除（完全に作り直す）
+            try:
+                shutil.rmtree(repo_path / ".git", ignore_errors=True)
+                st.info("`.git` を削除しました。")
+            except Exception as e:
+                st.error(f".git の削除に失敗: {e}")
+                continue
+
+            # 2) git init → add → commit（現スナップショットを初期コミット化）
+            code1, out1, err1 = git("init", cwd=repo_path)
+            st.code(out1 or err1 or "(no output)", language="bash")
+
+            code2, out2, err2 = git("add -A", cwd=repo_path)
+            st.code(out2 or err2 or "(no output)", language="bash")
+
+            code3, out3, err3 = git('commit -m "Fresh start: current snapshot only"', cwd=repo_path)
+            st.code(out3 or err3 or "(no output)", language="bash")
+
+            # 3) ブランチ名を設定（main など）
+            code4, out4, err4 = git(f"branch -M {shlex.quote(branch_name)}", cwd=repo_path)
+            st.code(out4 or err4 or "(no output)", language="bash")
+
+            # 4) リモート設定（入力 > 既存origin の優先で）
+            if use_remote:
+                code5, out5, err5 = git(f"remote add origin {shlex.quote(use_remote)}", cwd=repo_path)
+                st.code(out5 or err5 or "(no output)", language="bash")
+            else:
+                st.warning("リモートURLが未指定で既存originも見つかりません。pushはスキップします。")
+
+            # 5) 必要なら --force で push
+            if do_force_push and use_remote:
+                code6, out6, err6 = git(f"push -u --force origin {shlex.quote(branch_name)}", cwd=repo_path)
+                st.code(out6 or err6 or "(no output)", language="bash")
+                if code6 == 0:
+                    st.success("✅ 強制 push 完了（リモートを新履歴で上書き）")
+                else:
+                    st.error("❌ 強制 push に失敗しました。ログを確認してください。")
+
+            # 6) 仕上げメッセージ
+            st.success(f"🧨 {repo_name}: 再初期化が完了しました。")
+            if not do_force_push:
+                st.info("必要であれば『リモートURLを設定 → --force で push』を実行してください。")
 
         st.info("🔁 必要なら『ステータス再読み込み』ボタンで最新状態を反映してください。")

@@ -1,12 +1,11 @@
+# pages/30_nginx管理.py
 from __future__ import annotations
 from pathlib import Path
 import os
 import sys
-import re
-import toml
 import streamlit as st
 
-# lib から関数を呼び出し（既存のユーティリティを活用）
+# lib から関数を呼び出し
 from lib.nginx_utils import (
     SETTINGS_FILE, MINIMAL_NGINX_CONF,
     load_settings, resolve_nginx_conf_path, stat_text,
@@ -16,13 +15,11 @@ from lib.nginx_utils import (
     brew_services_list, pgrep_nginx, lsof_port_80, tail_log, mtime_str
 )
 
-# ============================================================
-# 画面初期化
-# ============================================================
-st.set_page_config(page_title="nginx 管理 (SSO対応)", page_icon="🧩", layout="wide")
-st.title("🧩 nginx 管理 — SSO(auth_portal) 対応版")
+# ============ 画面初期化 ============
+st.set_page_config(page_title="nginx 管理", page_icon="🧩", layout="wide")
+st.title("🧩 nginx 管理")
 
-# ---------------- 設定ロード ----------------
+# 設定ロード
 try:
     settings = load_settings(Path(SETTINGS_FILE))
     conf_path = resolve_nginx_conf_path(settings)
@@ -30,23 +27,12 @@ except Exception as e:
     st.error(f"settings.toml の読み込み／解決に失敗しました: {e}")
     st.stop()
 
-# nginx.toml パス（同階層の .streamlit/nginx.toml を想定）
-NGINX_TOML = Path(".streamlit/nginx.toml")
-
 colA, colB = st.columns([2, 3])
 
-# ============================================================
-# 左：基本操作（ファイル情報・操作）
-# ============================================================
+# ============ 左：基本操作 ============
 with colA:
     st.subheader("設定ファイルとパス")
-    st.code(
-        f"settings: {Path(SETTINGS_FILE).resolve()}\n"
-        f"nginx_root: {conf_path.parent}\n"
-        f"nginx.conf: {conf_path}\n"
-        f"nginx.toml: {NGINX_TOML.resolve()}",
-        language="bash",
-    )
+    st.code(f"settings: {Path(SETTINGS_FILE).resolve()}\nnginx_root: {conf_path.parent}\nnginx.conf: {conf_path}", language="bash")
 
     st.subheader("nginx.conf 情報")
     st.text(stat_text(conf_path))
@@ -64,44 +50,7 @@ with colA:
 
     st.caption("※ 権限エラー時は `sudo nginx -t -c ...` / `sudo brew services restart nginx` を手動実行してください。")
 
-    # -------- SSO 設定チェック（nginx.toml を読む） --------
-    st.markdown("---")
-    st.subheader("🔐 SSO 設定チェック（nginx.toml の sso_issuer）")
-
-    if not NGINX_TOML.exists():
-        st.warning(".streamlit/nginx.toml が見つかりません。SSO チェックをスキップします。")
-    else:
-        try:
-            nginx_cfg = toml.loads(NGINX_TOML.read_text(encoding="utf-8"))
-        except Exception as e:
-            st.error(f"nginx.toml の読み込みに失敗しました: {e}")
-            nginx_cfg = {}
-
-        # sso_issuer=true の app を探す
-        sso_apps = []
-        for app, cfg in nginx_cfg.items():
-            if not isinstance(cfg, dict):
-                continue
-            if cfg.get("enabled") is False:
-                continue
-            if cfg.get("sso_issuer") is True:
-                base = cfg.get("base") or f"/{app}"
-                port = cfg.get("port")
-                sso_apps.append((app, base, port))
-
-        if len(sso_apps) == 0:
-            st.error("sso_issuer=true のアプリが見つかりません。auth_portal の定義に `sso_issuer = true` を追加してください。")
-        elif len(sso_apps) > 1:
-            st.error("sso_issuer=true のアプリが複数あります。1つのみにしてください。")
-            st.code("\n".join([f"- {a} (base={b}, port={p})" for a, b, p in sso_apps]))
-        else:
-            app, base, port = sso_apps[0]
-            st.success(f"SSO発行アプリ: {app} (base={base}, port={port})")
-            st.caption("このアプリの location ブロックにだけ `proxy_cookie_path <base>/ \"/; SameSite=Lax; HttpOnly\";` が出力される想定です。")
-
-# ============================================================
-# 右：nginx.conf 編集 & 生成
-# ============================================================
+# ============ 右：編集 ============
 with colB:
     st.subheader("nginx.conf（編集）")
 
@@ -124,6 +73,7 @@ with colB:
     st.caption("変更状態: " + ("🟡 未保存の変更あり" if changed else "⚪ 変更なし"))
 
     c1, c2, c3 = st.columns([1, 1, 1])
+
     with c1:
         if st.button("📥 再読み込み（破棄）"):
             st.session_state.pop("nginx_orig", None)
@@ -157,31 +107,24 @@ with colB:
             except Exception as e:
                 st.error(f"保存に失敗しました: {e}")
 
-# ============================================================
-# 補足（トラブルシューティング）
-# ============================================================
+# ============ 補足 ============
 with st.expander("ℹ️ 補足：よくあるトラブルと対処"):
-    st.markdown(
-        """
+    st.markdown("""
 - **構文エラー**: `http { ... }` に `include mime.types;` がない、`server { ... }` の括弧抜け、`listen` 重複など。  
 - **ポート競合**: 既に他プロセスが `:80` を使用していると起動に失敗。`lsof -i :80` で確認。  
 - **権限**: `/opt/homebrew/etc/nginx` は環境により要権限。  
 - **Streamlit 側のURL**: 逆プロキシなら各アプリの `baseUrlPath` を合わせる（例：`/bot`, `/doc-manager`）。  
-- **SSO(cookie_path)**: `sso_issuer=true` の location のみに `proxy_cookie_path <base>/ "/; SameSite=Lax; HttpOnly";` を出す。
-"""
-    )
+""")
 
-# ============================================================
-# 自動生成（DRY-RUN）
-# ============================================================
+# ============ 自動生成（DRY-RUN で無変更） ============
 st.markdown("---")
 st.header("🧪 自動生成（tools/generate_nginx_conf.py を実行）")
 
 with st.expander("ℹ️ 各ボタンの動作説明（help）", expanded=False):
     st.markdown("### 🔍 差分プレビュー（比較のみ／DRY-RUN）")
     st.markdown(
-        "- `.streamlit/nginx.toml` と `.streamlit/settings.toml` から、\n"
-        "  `tools/generate_nginx_conf.py --dry-run` を実行して **生成内容をプレビュー** します。  \n"
+        "- `.streamlit/nginx.toml` と `.streamlit/settings.toml` から、"
+        "`tools/generate_nginx_conf.py --dry-run` を実行して **生成内容をプレビュー** します。  \n"
         "- 現行の `nginx.conf` と **unified diff** で比較します。  \n"
         "- **DRY-RUN のためファイルは一切変更されません**。"
     )
@@ -200,7 +143,9 @@ with st.expander("ℹ️ 各ボタンの動作説明（help）", expanded=False)
         "- 権限エラーが出る場合は、必要に応じて `sudo` を付けて手動実行してください。"
     )
 
-# ---------------- 差分プレビュー ----------------
+# ---------------------------------------
+# 差分プレビュー＋生成（書き込みあり）
+# ---------------------------------------
 with st.expander("🔧 生成スクリプト実行（.streamlit/nginx.toml + settings.toml → nginx.conf）", expanded=True):
     st.subheader("🔍 差分プレビュー（生成内容 vs 現行 nginx.conf）")
     code, generated_text = generate_conf_dry_run()
@@ -210,57 +155,22 @@ with st.expander("🔧 生成スクリプト実行（.streamlit/nginx.toml + set
     else:
         current_text = conf_path.read_text(encoding="utf-8", errors="replace") if conf_path.exists() else ""
         diff_txt = diff_current_vs_generated(current_text, generated_text or "")
-
-        # --- SSO 検証: proxy_cookie_path が auth_portal location に含まれるか ---
-        sso_ok_msg = ""
-        sso_warn = False
-        # nginx.toml から auth_portal の base を推定
-        try:
-            nginx_cfg = toml.loads(NGINX_TOML.read_text(encoding="utf-8")) if NGINX_TOML.exists() else {}
-        except Exception:
-            nginx_cfg = {}
-        base_auth = None
-        for app, cfg in nginx_cfg.items():
-            if isinstance(cfg, dict) and cfg.get("sso_issuer") is True:
-                base_auth = cfg.get("base") or f"/{app}"
-                break
-        if base_auth:
-            # location /base_auth/ ブロック内に proxy_cookie_path があるかざっくり検査
-            # 正規表現で location ブロックを抜粋
-            pattern = rf"location\s+{re.escape(base_auth)}/\s*\{{[\s\S]*?\}}"
-            m = re.search(pattern, generated_text or "")
-            if m:
-                block = m.group(0)
-                if "proxy_cookie_path" in block and base_auth in block:
-                    sso_ok_msg = f"✅ `location {base_auth}/` に `proxy_cookie_path` が出力されています。"
-                else:
-                    sso_ok_msg = f"⚠️ `location {base_auth}/` に `proxy_cookie_path` が見つかりません。テンプレ生成ロジックを確認してください。"
-                    sso_warn = True
-            else:
-                sso_ok_msg = f"⚠️ 生成結果に `location {base_auth}/` が見つかりません。baseUrlPath の不一致や生成ロジックを確認してください。"
-                sso_warn = True
-        else:
-            sso_ok_msg = "ℹ️ nginx.toml から sso_issuer の base が特定できませんでした。"
-
         if diff_txt:
-            tab1, tab2, tab3 = st.tabs(["差分（unified diff）", "生成プレビュー", "SSO検証"])
+            tab1, tab2 = st.tabs(["差分（unified diff）", "生成プレビュー"])
             with tab1:
                 st.code(diff_txt, language="diff")
             with tab2:
                 st.code(generated_text, language="nginx")
-            with tab3:
-                (st.warning if sso_warn else st.success)(sso_ok_msg)
+            st.caption("※ DRY-RUN のため、nginx.conf は一切変更していません。")
         else:
             st.success("差分はありません（生成内容と現行 nginx.conf は同一です／dry-run）")
-            if sso_ok_msg:
-                (st.warning if sso_warn else st.info)(sso_ok_msg)
 
     st.markdown("---")
     st.caption("このボタンは **実際に nginx.conf に書き込み**、その後 **構文チェックのみ** 実行します。")
     confirm = st.checkbox("書き込みに同意する（バックアップ作成→生成→構文チェック）", value=False)
 
     if st.button("🧪 生成 → 🔎 構文チェック（書き込みあり）", disabled=not confirm, type="primary"):
-        code1, out1 = run_cmd([sys.executable, "tools/generate_nginx_conf.py"])  # 書き込みあり
+        code1, out1 = run_cmd([sys.executable, "tools/generate_nginx_conf.py"])
         st.code(out1)
         if code1 != 0:
             st.error("生成に失敗したため構文チェックを中止しました。")
@@ -278,9 +188,7 @@ with st.expander("🔧 生成スクリプト実行（.streamlit/nginx.toml + set
                 icon="⚠️",
             )
 
-# ============================================================
-# nginx サービス操作
-# ============================================================
+# ============ nginx サービス操作 ============
 st.markdown("---")
 st.header("🛠️ nginx サービス操作（Homebrew 想定）")
 

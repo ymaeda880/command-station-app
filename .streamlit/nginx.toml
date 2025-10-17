@@ -32,6 +32,14 @@ enabled = true     # 起動対象
 port = 8590
 enabled = true     # 起動対象
 
+[auth_portal]
+port = 8591
+enabled = true     # 起動対象
+sso_issuer = true  # 認証トークン発行
+
+[login_test]
+port = 8592
+enabled = true     # 起動対象
 
 
 # enabled = false    # 今回は無効化
