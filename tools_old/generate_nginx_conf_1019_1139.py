@@ -29,13 +29,7 @@ except ModuleNotFoundError:
     print("ERROR: Python 3.11+ が必要です（tomllib が見つかりません）", file=sys.stderr)
     sys.exit(1)
 
-from lib.nginx_utils import (
-    load_settings,
-    resolve_nginx_conf_path,
-    SETTINGS_FILE,
-    resolve_local_fqdn,               # ← 追加：.local 名解決
-    inject_local_into_server_name,    # ← 追加：server_name への後付け注入
-)
+from lib.nginx_utils import load_settings, resolve_nginx_conf_path, SETTINGS_FILE
 
 NGINX_TOML = Path(".streamlit/nginx.toml")
 
@@ -232,12 +226,6 @@ def main(argv: list[str] | None = None) -> int:
 
     out_path = resolve_nginx_conf_path(settings)
     body = build_body(settings, apps)
-
-    # ========== 追加：.local を “後付け注入” ==========
-    # 既存の server_name を壊さずに <local_host_name>.local を足す（存在すれば無変更）
-    local_fqdn = resolve_local_fqdn(settings)
-    if local_fqdn:
-        body, _ = inject_local_into_server_name(body, local_fqdn)
 
     if args.dry_run:
         sys.stdout.buffer.write(body.encode("utf-8"))

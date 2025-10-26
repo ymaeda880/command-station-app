@@ -8,7 +8,7 @@ import subprocess
 import textwrap
 import time
 import toml
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 
 # ========= 定数 =========
 SETTINGS_FILE = Path(".streamlit/settings.toml")
@@ -66,7 +66,8 @@ def _read_location_from_secrets() -> Optional[str]:
 
         # --- 新仕様: [env].location ---
         try:
-            env_block = st.secrets["env"]  # Secrets は Mapping 互換オブジェクト
+            env_block = st.secrets["env"]  # Secrets オブジェクト（Mapping 互換）
+            # Secrets は dict ではないことがあるので、get を安全に呼ぶ
             loc = env_block.get("location") if hasattr(env_block, "get") else None
             if isinstance(loc, str) and loc.strip():
                 return loc.strip()
@@ -87,6 +88,7 @@ def _read_location_from_secrets() -> Optional[str]:
     return None
 
 
+
 def load_settings(settings_path: Path = SETTINGS_FILE) -> dict:
     """
     settings.toml を読み、[env].location は以下の優先順で上書きして返す：
@@ -101,10 +103,13 @@ def load_settings(settings_path: Path = SETTINGS_FILE) -> dict:
         except Exception as e:
             raise RuntimeError(f"{settings_path} の読込に失敗: {e}") from e
     else:
+        # settings が無い場合は、以後の解決に必要なのでここで明示
         raise FileNotFoundError(f"{settings_path} が見つかりません。")
 
+    # 既存 env
     env = dict(data.get("env", {}))
 
+    # location を決定
     loc = (
         _read_location_from_secrets()
         or os.getenv("APP_LOCATION_PRESET")
@@ -127,11 +132,12 @@ def load_settings(settings_path: Path = SETTINGS_FILE) -> dict:
 def resolve_nginx_conf_path(settings: dict) -> Path:
     """
     settings から現在のプレセットの nginx_root を取得し、nginx.conf のフルパスを返す。
+    厳密なバリデーションと分かりやすいエラーを付与。
     """
     try:
         loc = settings["env"]["location"]
     except KeyError as e:
-        raise KeyError("settings['env']['location'] が見つかりません。load_settings の戻り値を渡してください。") from e
+        raise KeyError("settings['env']['location'] が見つかりません。load_settings の戻り値をそのまま渡してください。") from e
 
     try:
         loc_block = settings["locations"][loc]
@@ -144,7 +150,8 @@ def resolve_nginx_conf_path(settings: dict) -> Path:
         raise KeyError(f"[locations].{loc}.nginx_root が未設定です。")
 
     nginx_root = Path(str(nginx_root_raw)).expanduser().resolve()
-    return nginx_root / DEFAULT_CONF_NAME
+    conf_path = (nginx_root / DEFAULT_CONF_NAME)
+    return conf_path
 
 
 def stat_text(p: Path) -> str:
@@ -160,9 +167,7 @@ def atomic_write(path: Path, data: str) -> None:
     """原子書き込み（tmpに書いてから置換）"""
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8", newline="\n") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
+        f.write(data); f.flush(); os.fsync(f.fileno())
     tmp.replace(path)
 
 
@@ -172,10 +177,9 @@ def make_backup(path: Path) -> Path:
     shutil.copy2(path, backup)
     return backup
 
-
 # ========= 生成（dry-run）関連 =========
 def generate_conf_dry_run(py_exe: str = None) -> Tuple[int, str]:
-    """tools/generate_nginx_conf.py を --dry-run で実行し、生成内容（stdoutのみ）を返す。"""
+    """tools/generate_nginx_conf.py を --dry-run で実行し、生成内容（純粋な stdout のみ）を返す。"""
     from sys import executable as sys_py
     py = py_exe or sys_py
     gen = Path("tools/generate_nginx_conf.py")
@@ -185,8 +189,8 @@ def generate_conf_dry_run(py_exe: str = None) -> Tuple[int, str]:
     try:
         p = subprocess.run(
             [py, str(gen), "--dry-run"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,   # ここでは混ぜない
+            stdout=subprocess.PIPE,   # ← stdout だけ取る
+            stderr=subprocess.PIPE,   # ← 警告は無視（混ぜない）
             text=True,
             check=False,
         )
@@ -195,8 +199,9 @@ def generate_conf_dry_run(py_exe: str = None) -> Tuple[int, str]:
         return 1, f"[Exception] {e}"
 
 
+
 def diff_current_vs_generated(current_text: str, generated_text: str) -> str:
-    """unified diff のテキストを返す"""
+    """unified diff のテキストを返す（UI側で st.code(diff, language='diff') 予定）"""
     import difflib
     return "".join(difflib.unified_diff(
         current_text.splitlines(keepends=True),
@@ -266,13 +271,14 @@ def mtime_str(p: Path) -> str:
         return "-"
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(p.stat().st_mtime))
 
+### これより下は　https接続のための追加の関数
 
-# ========= HTTPS 補助 =========
+# 追加（80の兄弟関数）
 def lsof_port_443() -> str:
     _, out = run_cmd("lsof -nP -iTCP:443 -sTCP:LISTEN | grep nginx || true", shell=True)
     return out
 
-
+# 追加：自己署名証明書の非対話生成
 def create_self_signed_cert(
     cert_path: Path,
     key_path: Path,
@@ -298,43 +304,3 @@ def create_self_signed_cert(
     ]
     return run_cmd(cmd)
 
-
-# ========= .local 名 取り出し & 注入（generator から再利用） =========
-def resolve_local_fqdn(settings: dict) -> Optional[str]:
-    """
-    settings から現在の location を特定し、
-    [locations.<env>].local_host_name を用いて '<name>.local' を返す。
-    見つからなければ None。
-    """
-    try:
-        env_name = (settings.get("env") or {}).get("location")
-        locs = settings.get("locations") or {}
-        loc = locs.get(env_name) if env_name in locs else None
-        if isinstance(loc, dict):
-            lhn = (loc.get("local_host_name") or "").strip()
-            if lhn:
-                return f"{lhn}.local"
-    except Exception:
-        pass
-    return None
-
-
-def inject_local_into_server_name(conf_text: str, local_fqdn: str) -> Tuple[str, bool]:
-    """
-    server_name 行に local_fqdn を追加（既に含まれていれば無変更）。
-    返り値: (置換後テキスト, 変更が発生したか)
-    """
-    import re
-    changed = False
-
-    def _repl(m):
-        nonlocal changed
-        names = m.group(1).strip()
-        tokens = names.split()
-        if local_fqdn in tokens:
-            return m.group(0)  # 変更なし
-        changed = True
-        return f"server_name {names} {local_fqdn};"
-
-    out = re.sub(r"server_name\s+([^;]+);", _repl, conf_text)
-    return out, changed

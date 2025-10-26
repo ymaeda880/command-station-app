@@ -21,7 +21,7 @@ st.warning("GitHubとの差分を見る前に、まず『🌿 fetch --all --prun
 st.caption(
     "- `settings.toml` の location から **project_root** を取得\n"
     "- `*_project/` 直下の `*_app/`（かつ `app.py` を含む）を検出\n"
-    "- さらに `apps_portal/` も Git 対象に含める\n"
+    "- さらに `apps_portal/` と `common_lib/` も Git 対象に含める\n"
     "- 一覧で Git ステータスを表示 → 選択に対して一括操作（fetch/pull/push/commit/init/clone）"
 )
 st.info(f"現在の project_root: `{PROJECT_ROOT}`")
