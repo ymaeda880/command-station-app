@@ -164,11 +164,11 @@ git_targets = [r for r in sel if r["is_repo"]]
 # 3) add / commit / push
 # ------------------------------------------------------------
 thick_divider("#007ACC", 4)
-st.subheader("✍️ add / commit / push（選択分）")
+st.subheader("✍️ （🟢　日常）add / commit / push（選択分）（変更分のpush）")
 
 with st.form("commit_form", clear_on_submit=False):
     add_pattern = st.text_input("add 対象", ".", key="txt_add_pattern")
-    commit_msg = st.text_input("コミットメッセージ", "", key="txt_commit_msg")
+    commit_msg = st.text_input("コミットメッセージ（月日-時間：（例）1026-1430）", "", key="txt_commit_msg")
     do_push = st.checkbox("コミット後に push する", value=False, key="chk_do_push")
     submitted = st.form_submit_button("実行", key="btn_commit_submit")
 
@@ -300,7 +300,7 @@ with col[2]:
 # 6) 🧲 git clone（新規取得：選択対象“の中身”に clone）
 # ------------------------------------------------------------
 thick_divider("#007ACC", 4)
-st.subheader("🧲 git clone（新規取得：選択対象フォルダの**中に** `.` で clone）")
+st.subheader("🧲 （🟢　最初のclone）git clone（新規取得：選択対象フォルダの**中に** `.` で clone）")
 
 with st.form("clone_into_selected_form", clear_on_submit=False):
     st.caption("※ 保存先は **選択済みの1件** の `_app` ディレクトリです。フォルダ名は常に「.」で、**中身に** clone します。")
@@ -350,7 +350,7 @@ if run_clone2:
 # 7) 新規リポジトリ初期化
 # ------------------------------------------------------------
 thick_divider("#007ACC", 4)
-st.subheader("🆕 新規 Git リポジトリ初期化 ➜ 初回push")
+st.subheader("🆕 （🟢　最初のgit init）新規 Git リポジトリ初期化 ➜ 初回push")
 
 with st.expander("🧩 処理の内容を表示", expanded=False):
     st.markdown(
@@ -503,7 +503,7 @@ if st.button("初回 push を実行（選択分）", key="btn_first_push"):
 # 9) 💣 強制リセット（選択分）
 # ------------------------------------------------------------
 thick_divider("#ff4d4f", 3)
-st.subheader("💣 強制リセット（選択分）")
+st.subheader("💣 （🟢　remoteとprec macのファイル更新）強制リセット（選択分）")
 
 with st.expander("💣 強制リセット（何が起きる？安全確認ポイント）", expanded=False):
     st.markdown(
