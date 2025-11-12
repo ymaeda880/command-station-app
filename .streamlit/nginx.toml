@@ -27,6 +27,11 @@ enabled = true     # 起動対象
 port = 8506
 enabled = true     # 起動対象
 
+[text_studio]
+port = 8507
+enabled = true     # 起動対象
+
+################
 
 [command_station]
 port = 8590
