@@ -206,6 +206,19 @@ def discover_apps(project_root: Path = PROJECT_ROOT) -> List[AppDir]:
             )
         )
 
+    # command_files も対象に含める
+    cmd_files = project_root / "command_files"
+    if cmd_files.exists() and cmd_files.is_dir():
+        results.append(
+            AppDir(
+                name="command_files",
+                app_path=cmd_files,
+                project_path=cmd_files,
+                kind="files",  # "lib" や他の分類名でもOK
+            )
+        )
+
+
     return results
 
 
