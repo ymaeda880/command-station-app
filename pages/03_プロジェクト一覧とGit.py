@@ -137,7 +137,14 @@ sel = []
 for i, row in df.iterrows():
     c1, c2 = st.columns([1, 7])
     with c1:
-        checked = st.checkbox("", key=f"sel_{i}")
+        # checked = st.checkbox("", key=f"sel_{i}")
+
+        # 修正案（ラベルは内部用、画面では非表示）
+        checked = st.checkbox(
+            "選択",  # 何でもよい（アクセシビリティ的には意味のある文字が望ましい）
+            key=f"sel_{i}",
+            label_visibility="collapsed",
+)
     with c2:
         git_badge = "🟢 Git" if row["is_repo"] else "⚪️ not Git"
         st.write(
