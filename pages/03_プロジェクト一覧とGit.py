@@ -78,13 +78,33 @@ df_display = df.rename(columns={
     "git_size_bytes": ".git サイズ(byte)",
 })
 
+# ------------------------------------------------------------
+# ✅ pandas→pyarrow 事故を避けるための表示用 型固定（おすすめ）
+#   - df（元データ）は触らず df_display だけ整形
+# ------------------------------------------------------------
+
+# 1) Path → str（ここが一番事故りやすい）
+if "パス" in df_display.columns:
+    df_display["パス"] = df_display["パス"].astype(str)
+
+# 2) 数値列：None/NaN混在を吸収して nullable Int に寄せる
+for c in ["変更数", "↑ ahead", "↓ behind", ".git サイズ(byte)"]:
+    if c in df_display.columns:
+        df_display[c] = pd.to_numeric(df_display[c], errors="coerce").astype("Int64")
+
+# 3) 文字列列：None混在でも安定する pandas StringDtype に寄せる
+for c in ["名前", "種別", "ブランチ", "Git管理", ".git サイズ"]:
+    if c in df_display.columns:
+        df_display[c] = df_display[c].astype("string")
+
+
 # 表示したい列の順序（short_status は詳細枠で出すので一覧からは外す）
 cols = ["名前", "種別", "ブランチ", "変更数", "↑ ahead", "↓ behind", "Git管理", ".git サイズ", "パス"]
 # 安全に存在チェックして不足列を除外
 cols = [c for c in cols if c in df_display.columns]
 
 # 一覧テーブル表示（横幅フィット）
-st.dataframe(df_display[cols], use_container_width=True)
+st.dataframe(df_display[cols], width='stretch')
 
 # 合計サイズのサマリ（任意）
 if "git_size_bytes" in df.columns:
