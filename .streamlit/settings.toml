@@ -45,3 +45,11 @@ user         = "www-data"          # ← Linuxサーバー用に設定例
 [app]
 # 利用可能な環境プリセット
 available_presets = ["Home", "Portable", "Prec", "Server"]
+
+# =====バックアップssd ===
+# -----Storageのバックアップ用-----
+[backup.ssd]
+ssd1 = "Extreme SSD"
+ssd2 = "aisv backup"
+
+

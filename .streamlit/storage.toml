@@ -1,0 +1,47 @@
+# command_station_app/.streamlit/storage.toml
+
+# ============================================================
+# InBoxStorages（既存）
+# ============================================================
+[inbox.storage.external.Home]
+root = "/Volumes/Extreme SSD/InBoxStorages"
+
+[inbox.storage.external.Prec]
+root = "/Volumes/PrecSSD/InBoxStorages"
+
+
+# ============================================================
+# Storages（notes / ai_memo / minutes / bot 共通）
+# ============================================================
+[storages.storage.external.Home]
+root = "/Volumes/Extreme SSD/Storages"
+
+[storages.storage.external.Prec]
+root = "/Volumes/PrecSSD/Storages"
+
+
+# ============================================================
+# External SSDs（物理デバイス定義）
+# location = Home / Prec / Portable
+# role     = main / backup
+# ============================================================
+
+[storage.external.Home.main]
+root = "/Volumes/Extreme SSD"
+
+[storage.external.Home.backup]
+root = "/Volumes/Extreme SSD Backup"
+
+
+[storage.external.Prec.main]
+root = "/Volumes/PrecSSD"
+
+[storage.external.Prec.backup]
+root = "/Volumes/PrecSSD Backup"
+
+
+[storage.external.Portable.main]
+root = "/Volumes/Extreme SSD"
+
+[storage.external.Portable.backup]
+root = "/Volumes/PortableSSD Backup"
