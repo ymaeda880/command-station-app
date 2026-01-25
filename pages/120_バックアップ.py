@@ -1,94 +1,24 @@
 # -*- coding: utf-8 -*-
 # command_station_app/pages/73_バックアップ.py
 """
-Storage / 認証データ バックアップ用 Streamlit ページ
+Storage / 認証データ / Inbox バックアップ用 Streamlit ページ（common_lib 正本運用）
 
-本ページは、PREC AI / command_station_app において、
-プロジェクト配下の重要データを外付け SSD に rsync で安全にバックアップするための
-管理者向けユーティリティである。
+- location は command_station secrets.toml から取得（common_lib）
+- Storages の場所は storages_config の正本 API を使用
+- Inbox の場所は inbox_config の正本 API を使用
+- backup / backup2 の SSD 判定は probe API（停止しない）
 
-────────────────────────────────────────────
-【バックアップ対象（論理単位）】
-- storages:
-    <project_root>/Storages
-- auth:
-    <project_root>/auth_portal_project/auth_portal_app/data
-
-※ 両者は完全に分離したディレクトリとして保存される
-
-────────────────────────────────────────────
-【バックアップ先構造】
-<SSD_MOUNT>/aisv_Backups/backups/
-  ├─ storages/
-  │   ├─ latest/        （常に最新状態：--delete 付きで完全同期）
-  │   ├─ daily/
-  │   │   └─ YYYY-MM-DD_HHMMSS/ （日次スナップショット）
-  │   └─ logs/
-  └─ auth/
-      ├─ latest/
-      ├─ daily/
-      └─ logs/
-
-────────────────────────────────────────────
-【latest / daily の意味】
-- latest:
-    rsync --delete により「完全ミラー」を維持
-    → 不要ファイルは削除される（不可逆）
-
-- daily:
-    スナップショット保存
-    --link-dest=latest を使用することで
-    実体は差分のみ（ハードリンク）となり容量を節約可能
-
-────────────────────────────────────────────
-【設定ファイル要件】
-
-1. secrets.toml（必須）
-    [env]
-    location = "xxx"
-
-2. settings.toml（必須）
-    [locations.<location>]
-    project_root = "/absolute/path/to/projects"
-
-    [app]
-    ssd1 = "VolumeName_or_/absolute/path"
-    ssd2 = "VolumeName_or_/absolute/path"   # 任意
-
-※ project_root / ssd 設定が欠けている場合は即停止する
-※ 暗黙のデフォルト値は一切使用しない設計
-
-────────────────────────────────────────────
-【SSD 判定ロジック】
-- "/Volumes/<label>" または 絶対パス をマウント先として解釈
-- 接続中 SSD のみ実行ボタンを有効化
-- 複数 SSD が設定されている場合、個別に実行可能
-
-────────────────────────────────────────────
-【安全設計】
-- 実行前に明示的な確認チェックを要求
-- Dry-run モードあり（rsync --dry-run）
-- latest / daily 失敗時は即中断
-- 失敗・成功ログを JSON で保存
-- 同時実行防止（session_state["backup_running"]）
-
-────────────────────────────────────────────
-【注意】
-- latest は --delete を伴うため不可逆操作である
-- 誤った SSD を選択すると内容が上書きされる
-- 本ページは管理者・運用者専用を前提とする
-
-────────────────────────────────────────────
-【依存要件】
-- Python 3.11 以上（tomllib 使用）
-- rsync コマンドが利用可能であること
-- Streamlit 実行環境
-
+このページでは、
+① storages + auth のバックアップ
+② inbox のバックアップ
+を「別セクション」「別ボタン」「別確認チェック」で実行する。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import sys
 from pathlib import Path
 import json
 import shlex
@@ -96,28 +26,30 @@ import subprocess
 
 import streamlit as st
 
+# ============================================================
+# common_lib を import 可能にする（projects を sys.path に追加）
+# ============================================================
+_THIS = Path(__file__).resolve()
+PROJECTS_ROOT = _THIS.parents[3]  # .../projects
+
+if str(PROJECTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECTS_ROOT))
+
+# ============================================================
+# common_lib
+# ============================================================
+from common_lib.env.config import get_location_from_command_station_secrets
+from common_lib.storage.storages_config import resolve_storages_root
+from common_lib.storage.inbox_config import resolve_inbox_root
+from common_lib.storage.external_mount_probe import probe_backup_mounts
+from common_lib.auth.paths import resolve_auth_data_root
+
 from lib.backup.explanation import render_backup_explanation
 
-# -----------------------------
-# TOML reader (py3.11+: tomllib)
-# -----------------------------
-try:
-    import tomllib  # py3.11+
-except Exception:  # pragma: no cover
-    tomllib = None
 
-
-# ============================
-# 固定パス
-# ============================
-APP_DIR = Path(__file__).resolve().parents[1]
-STREAMLIT_DIR = APP_DIR / ".streamlit"
-SETTINGS_TOML = STREAMLIT_DIR / "settings.toml"
-
-
-# ============================
+# ============================================================
 # 共通ユーティリティ
-# ============================
+# ============================================================
 @dataclass
 class RunResult:
     ok: bool
@@ -125,14 +57,6 @@ class RunResult:
     stdout: str
     stderr: str
     cmd: list[str]
-
-
-def load_toml_required(path: Path) -> dict:
-    if tomllib is None:
-        raise RuntimeError("tomllib が利用できません（Python 3.11+ 必須）")
-    if not path.exists():
-        raise FileNotFoundError(f"{path} が存在しません")
-    return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
 def sh(cmd: list[str]) -> RunResult:
@@ -158,199 +82,226 @@ def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
-def mounted_volume_path(v: str) -> Path:
-    return Path(v) if v.startswith("/") else (Path("/Volumes") / v)
+def backup_sets(
+    *,
+    role: str,
+    mount: Path,
+    backup_sets: list[dict],
+    use_link_dest: bool,
+    dry_run: bool,
+) -> tuple[bool, str | None]:
+    """
+    指定した backup_sets を、指定 mount に対して latest + daily で実行する。
+    失敗したら (False, reason) を返す。成功なら (True, None)。
+    """
+    root = mount / "aisv_Backups" / "backups"
+    ensure_dir(root)
+
+    rsync_base = ["rsync", "-a"]
+    if dry_run:
+        rsync_base.append("--dry-run")
+
+    for s in backup_sets:
+        name = s["name"]
+        src: Path = s["src"]
+
+        base = root / name
+        latest = base / "latest"
+        daily = base / "daily" / now_stamp()
+        logs = base / "logs"
+
+        ensure_dir(latest)
+        ensure_dir(daily)
+        ensure_dir(logs)
+
+        # latest（完全ミラー：--delete）
+        cmd_latest = rsync_base + ["--delete", f"{src}/", f"{latest}/"]
+        st.write(f"#### {name} / latest")
+        st.code(fmt_cmd(cmd_latest), language="bash")
+        r1 = sh(cmd_latest)
+        if not r1.ok:
+            st.error(f"{name}: latest 失敗")
+            return False, f"{name}: latest failed"
+
+        # daily（スナップショット）
+        cmd_daily = rsync_base.copy()
+        if use_link_dest:
+            cmd_daily += ["--link-dest", str(latest)]
+        cmd_daily += [f"{src}/", f"{daily}/"]
+
+        st.write(f"#### {name} / daily")
+        st.code(fmt_cmd(cmd_daily), language="bash")
+        r2 = sh(cmd_daily)
+        if not r2.ok:
+            st.error(f"{name}: daily 失敗")
+            return False, f"{name}: daily failed"
+
+    return True, None
 
 
-def is_connected_mount(p: Path) -> bool:
-    return p.exists() and p.is_dir()
-
-
-# ============================
+# ============================================================
 # UI
-# ============================
+# ============================================================
 st.set_page_config(page_title="Storageバックアップ", page_icon="💾", layout="centered")
-st.title("💾 Storageバックアップ（latest + daily）")
+st.title("💾 バックアップ（storages/auth と inbox を別実行）")
 
-# 表示したい位置で
 render_backup_explanation()
+st.caption("SSD内 aisv_Backups/backups/ に storages / auth / inbox を分離して保存します。")
 
-st.caption("SSD内 aisv_Backups/backups/ に storages / auth を分離して保存します。")
-
-# --- secrets.toml
-loc = st.secrets.get("env", {}).get("location")
-if not loc:
-    st.error('secrets.toml の [env].location が未設定です')
+# ============================================================
+# location（正本：command_station secrets.toml）
+# ============================================================
+try:
+    loc = get_location_from_command_station_secrets(PROJECTS_ROOT)
+except Exception as e:
+    st.error(f"location 取得失敗：{e}")
     st.stop()
 
 st.write(f"- location: **{loc}**")
+st.write(f"- PROJECTS_ROOT: `{PROJECTS_ROOT}`")
 
-# --- settings.toml
-try:
-    settings = load_toml_required(SETTINGS_TOML)
-except Exception as e:
-    st.error(f"settings.toml 読み込み失敗：{e}")
-    st.stop()
+# ============================================================
+# バックアップ元（正本）
+# ============================================================
+storages_src = resolve_storages_root(PROJECTS_ROOT)
+auth_src = resolve_auth_data_root(PROJECTS_ROOT)
+inbox_src = resolve_inbox_root(PROJECTS_ROOT)
 
-loc_cfg = settings.get("locations", {}).get(loc)
-if not isinstance(loc_cfg, dict):
-    st.error(f"settings.toml に [locations.{loc}] がありません")
-    st.stop()
-
-project_root = loc_cfg.get("project_root")
-if not project_root:
-    st.error(f"locations.{loc}.project_root が未設定です")
-    st.stop()
-
-project_root = Path(project_root)
-st.write(f"- project_root: `{project_root}`")
-
-# ============================
-# バックアップ対象（論理単位）
-# ============================
-BACKUP_SETS = [
-    {
-        "name": "storages",
-        "src": project_root / "Storages",
-    },
-    {
-        "name": "auth",
-        "src": project_root / "auth_portal_project" / "auth_portal_app" / "data",
-    },
-]
-
-# 事前存在チェック
-for s in BACKUP_SETS:
-    if not s["src"].exists():
-        st.error(f"バックアップ元が存在しません: {s['src']}")
+# 存在チェック（ここは正本なので止めてOK）
+for p in (storages_src, auth_src, inbox_src):
+    if not p.exists():
+        st.error(f"バックアップ元が存在しません: {p}")
         st.stop()
 
-# ============================
-# SSD 設定（共通・必須）
-# ============================
-backup_cfg = settings.get("backup", {})
-ssd_cfg = backup_cfg.get("ssd", {})
-
-ssd1 = ssd_cfg.get("ssd1")
-ssd2 = ssd_cfg.get("ssd2")
-
-if not ssd1 and not ssd2:
-    st.error("settings.toml の [app] に ssd1 / ssd2 を設定してください")
-    st.stop()
-
-ssd_items: list[tuple[str, Path | None]] = []
-for label in (ssd1, ssd2):
-    if not label:
-        continue
-    mount = mounted_volume_path(str(label))
-    ssd_items.append((str(label), mount if is_connected_mount(mount) else None))
-
+# ============================================================
+# SSD 判定（probe：停止しない）※ページ内で共通
+# ============================================================
 st.divider()
 st.write("### バックアップ先SSD")
 
-for label, mount in ssd_items:
-    if mount:
-        st.success(f"✅ {label}：接続中（{mount}）")
-    else:
-        st.warning(f"⚠️ {label}：未接続（期待: {mounted_volume_path(label)}）")
+probe = probe_backup_mounts(PROJECTS_ROOT, roles=("backup", "backup2"))
 
-# ============================
-# オプション
-# ============================
+for r in probe:
+    if r.path:
+        st.success(f"✅ role={r.role}：接続中（{r.path}）")
+    else:
+        st.warning(f"⚠️ role={r.role}：{r.reason}")
+
+enabled = [(r.role, r.path) for r in probe if r.path is not None]
+if not enabled:
+    st.error("接続中のバックアップ先SSDがありません")
+    st.stop()
+
+# ============================================================
+# 実行中フラグ（セクション別）
+# ============================================================
+if "backup_running_storage" not in st.session_state:
+    st.session_state["backup_running_storage"] = False
+
+if "backup_running_inbox" not in st.session_state:
+    st.session_state["backup_running_inbox"] = False
+
+
+# ============================================================
+# セクション① storages + auth
+# ============================================================
 st.divider()
-use_link_dest = st.checkbox("daily は差分（--link-dest）で節約", value=True)
-dry_run = st.checkbox("Dry-run（コピーせず表示のみ）", value=False)
-confirm = st.checkbox(
-    "確認：選択したSSDに latest（--delete）と daily を作成します（不可逆）",
-    value=False
+st.subheader("① storages + auth バックアップ（latest + daily）")
+
+use_link_dest_sa = st.checkbox("（storages+auth）daily は差分（--link-dest）で節約", value=True, key="use_link_dest_sa")
+dry_run_sa = st.checkbox("（storages+auth）Dry-run（コピーせず表示のみ）", value=False, key="dry_run_sa")
+confirm_sa = st.checkbox(
+    "（storages+auth）確認：選択したSSDに latest（--delete）と daily を作成します（不可逆）",
+    value=False,
+    key="confirm_sa",
 )
 
-if "backup_running" not in st.session_state:
-    st.session_state["backup_running"] = False
+st.write("バックアップ対象：")
+st.write(f"- storages: `{storages_src}`")
+st.write(f"- auth    : `{auth_src}`")
 
-# ============================
-# 実行
-# ============================
-st.divider()
-cols = st.columns(len(ssd_items))
-clicked: Path | None = None
+cols_sa = st.columns(len(enabled))
+clicked_sa: tuple[str, Path] | None = None
 
-for i, (label, mount) in enumerate(ssd_items):
-    with cols[i]:
-        disabled = (mount is None) or st.session_state["backup_running"]
-        if st.button(f"{label} へバックアップ", disabled=disabled, type="primary"):
-            clicked = mount
+for i, (role, mount) in enumerate(enabled):
+    with cols_sa[i]:
+        disabled = st.session_state["backup_running_storage"] or st.session_state["backup_running_inbox"]
+        if st.button(f"{role} へ（storages+auth）", disabled=disabled, type="primary", key=f"btn_sa_{role}"):
+            clicked_sa = (role, mount)
 
-
-def backup_all(mount: Path) -> None:
-    st.session_state["backup_running"] = True
-    try:
-        root = mount / "aisv_Backups" / "backups"
-        ensure_dir(root)
-
-        rsync_base = ["rsync", "-a"]
-        if dry_run:
-            rsync_base.append("--dry-run")
-
-        for s in BACKUP_SETS:
-            name = s["name"]
-            src = s["src"]
-
-            base = root / name
-            latest = base / "latest"
-            daily = base / "daily" / now_stamp()
-            logs = base / "logs"
-
-            ensure_dir(latest)
-            ensure_dir(daily)
-            ensure_dir(logs)
-
-            # latest
-            cmd_latest = rsync_base + ["--delete", str(src) + "/", str(latest) + "/"]
-            st.write(f"#### {name} / latest")
-            st.code(fmt_cmd(cmd_latest), language="bash")
-            r1 = sh(cmd_latest)
-
-            if not r1.ok:
-                logp = logs / f"{now_stamp()}_latest_failed.json"
-                logp.write_text(json.dumps({
-                    "cmd": r1.cmd,
-                    "stderr": r1.stderr,
-                }, ensure_ascii=False, indent=2))
-                st.error(f"{name}: latest 失敗")
-                return
-
-            # daily
-            cmd_daily = rsync_base.copy()
-            if use_link_dest:
-                cmd_daily += ["--link-dest", str(latest)]
-            cmd_daily += [str(src) + "/", str(daily) + "/"]
-
-            st.write(f"#### {name} / daily")
-            st.code(fmt_cmd(cmd_daily), language="bash")
-            r2 = sh(cmd_daily)
-
-            logp = logs / f"{now_stamp()}_backup.json"
-            logp.write_text(json.dumps({
-                "cmd_latest": r1.cmd,
-                "cmd_daily": r2.cmd,
-                "ok": r1.ok and r2.ok,
-            }, ensure_ascii=False, indent=2))
-
-            if not r2.ok:
-                st.error(f"{name}: daily 失敗")
-                return
-
-        st.success("すべてのバックアップが完了しました")
-
-    finally:
-        st.session_state["backup_running"] = False
-
-
-if clicked:
-    if not confirm:
-        st.error("確認チェックをオンにしてください")
+if clicked_sa:
+    role, mount = clicked_sa
+    if not confirm_sa:
+        st.error("（storages+auth）確認チェックをオンにしてください")
     else:
-        backup_all(clicked)
+        st.session_state["backup_running_storage"] = True
+        try:
+            ok, reason = backup_sets(
+                role=role,
+                mount=mount,
+                backup_sets=[
+                    {"name": "storages", "src": storages_src},
+                    {"name": "auth", "src": auth_src},
+                ],
+                use_link_dest=use_link_dest_sa,
+                dry_run=dry_run_sa,
+            )
+            if ok:
+                st.success("（storages+auth）バックアップが完了しました")
+            else:
+                st.error(f"（storages+auth）バックアップ失敗：{reason}")
+        finally:
+            st.session_state["backup_running_storage"] = False
 
-st.caption("※ storages / auth は完全に分離して保存されます")
+
+# ============================================================
+# セクション② inbox
+# ============================================================
+st.divider()
+st.subheader("② inbox バックアップ（latest + daily）")
+
+use_link_dest_in = st.checkbox("（inbox）daily は差分（--link-dest）で節約", value=True, key="use_link_dest_in")
+dry_run_in = st.checkbox("（inbox）Dry-run（コピーせず表示のみ）", value=False, key="dry_run_in")
+confirm_in = st.checkbox(
+    "（inbox）確認：選択したSSDに latest（--delete）と daily を作成します（不可逆）",
+    value=False,
+    key="confirm_in",
+)
+
+st.write("バックアップ対象：")
+st.write(f"- inbox: `{inbox_src}`")
+
+cols_in = st.columns(len(enabled))
+clicked_in: tuple[str, Path] | None = None
+
+for i, (role, mount) in enumerate(enabled):
+    with cols_in[i]:
+        disabled = st.session_state["backup_running_inbox"] or st.session_state["backup_running_storage"]
+        if st.button(f"{role} へ（inbox）", disabled=disabled, type="primary", key=f"btn_in_{role}"):
+            clicked_in = (role, mount)
+
+if clicked_in:
+    role, mount = clicked_in
+    if not confirm_in:
+        st.error("（inbox）確認チェックをオンにしてください")
+    else:
+        st.session_state["backup_running_inbox"] = True
+        try:
+            ok, reason = backup_sets(
+                role=role,
+                mount=mount,
+                backup_sets=[
+                    {"name": "inbox", "src": inbox_src},
+                ],
+                use_link_dest=use_link_dest_in,
+                dry_run=dry_run_in,
+            )
+            if ok:
+                st.success("（inbox）バックアップが完了しました")
+            else:
+                st.error(f"（inbox）バックアップ失敗：{reason}")
+        finally:
+            st.session_state["backup_running_inbox"] = False
+
+
+st.caption("※ storages / auth / inbox は完全に分離して保存されます")

@@ -23,14 +23,17 @@ root = "/Volumes/PrecSSD/Storages"
 # ============================================================
 # External SSDs（物理デバイス定義）
 # location = Home / Prec / Portable
-# role     = main / backup
+# role     = main / backup / backup2
 # ============================================================
 
 [storage.external.Home.main]
 root = "/Volumes/Extreme SSD"
 
 [storage.external.Home.backup]
-root = "/Volumes/Extreme SSD Backup"
+root = "/Volumes/Extreme SSD2"
+
+[storage.external.Home.backup2]
+root = "/Volumes/aisv backup"
 
 
 [storage.external.Prec.main]
@@ -39,9 +42,15 @@ root = "/Volumes/PrecSSD"
 [storage.external.Prec.backup]
 root = "/Volumes/PrecSSD Backup"
 
+[storage.external.Prec.backup2]
+root = "/Volumes/PrecSSD Backup2"
+
 
 [storage.external.Portable.main]
 root = "/Volumes/Extreme SSD"
 
 [storage.external.Portable.backup]
 root = "/Volumes/PortableSSD Backup"
+
+[storage.external.Portable.backup2]
+root = "/Volumes/PortableSSD Backup2"
