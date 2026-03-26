@@ -1,6 +1,9 @@
 # .streamlit/settings.toml
 # プロジェクト名：command_station_app
 
+[ui]
+banner_key = "orange_event"
+
 [env]
 # 利用する環境を選択:  "Home" / "Portable" / "Server" / "Prec"
 # location = "Home"

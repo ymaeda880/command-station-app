@@ -90,7 +90,7 @@ http {{
 
         proxy_read_timeout 86400;
         proxy_redirect off;
-        client_max_body_size 200m;
+        client_max_body_size 2G;
 
 {location_blocks}
         # エラーページ

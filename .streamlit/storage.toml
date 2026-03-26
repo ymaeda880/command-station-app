@@ -1,7 +1,7 @@
 # command_station_app/.streamlit/storage.toml
 
 # ============================================================
-# InBoxStorages（既存）
+# InBoxStorages（main）
 # ============================================================
 [inbox.storage.external.Home]
 root = "/Volumes/Extreme SSD/InBoxStorages"
@@ -9,9 +9,12 @@ root = "/Volumes/Extreme SSD/InBoxStorages"
 [inbox.storage.external.Prec]
 root = "/Volumes/PrecSSD/InBoxStorages"
 
+[inbox.storage.external.Portable]
+root = "/Volumes/Extreme SSD/InBoxStorages"
+
 
 # ============================================================
-# Storages（notes / ai_memo / minutes / bot 共通）
+# Storages（main：notes / ai_memo / minutes / bot 共通）
 # ============================================================
 [storages.storage.external.Home]
 root = "/Volumes/Extreme SSD/Storages"
@@ -19,38 +22,155 @@ root = "/Volumes/Extreme SSD/Storages"
 [storages.storage.external.Prec]
 root = "/Volumes/PrecSSD/Storages"
 
+[storages.storage.external.Portable]
+root = "/Volumes/Extreme SSD/Storages"
+
 
 # ============================================================
-# External SSDs（物理デバイス定義）
-# location = Home / Prec / Portable
-# role     = main / backup / backup2
+# Archive（main：長期保管）
+# ============================================================
+[archive.storage.external.Home]
+root = "/Volumes/Extreme SSD/Archive"
+
+[archive.storage.external.Prec]
+root = "/Volumes/PrecSSD/Archive"
+
+[archive.storage.external.Portable]
+root = "/Volumes/Extreme SSD/Archive"
+
+
+# ============================================================
+# Databases（main：RAG / 各種DB保管）
+# 実フォルダ名：Databases
+# ============================================================
+[databases.storage.external.Home]
+root = "/Volumes/Extreme SSD/Databases"
+
+[databases.storage.external.Prec]
+root = "/Volumes/PrecSSD/Databases"
+
+[databases.storage.external.Portable]
+root = "/Volumes/Extreme SSD/Databases"
+
+
+# ============================================================
+# バックアップルート（新設定：正本）
+# - 用途（storage / inbox / archive / databases）× role（backup / backup2）× location（Home / Prec / Portable）
+# - root は「物理root」を指し、実フォルダ名（InBoxStorages/Storages/Archive/Databases）は用途側で付与する運用
 # ============================================================
 
-[storage.external.Home.main]
+# ----------------------------
+# Home
+# ----------------------------
+[storage.backup.Home]
 root = "/Volumes/Extreme SSD"
 
-[storage.external.Home.backup]
-root = "/Volumes/Extreme SSD2"
-
-[storage.external.Home.backup2]
+[storage.backup2.Home]
 root = "/Volumes/aisv backup"
 
-
-[storage.external.Prec.main]
-root = "/Volumes/PrecSSD"
-
-[storage.external.Prec.backup]
-root = "/Volumes/PrecSSD Backup"
-
-[storage.external.Prec.backup2]
-root = "/Volumes/PrecSSD Backup2"
-
-
-[storage.external.Portable.main]
+[inbox.backup.Home]
 root = "/Volumes/Extreme SSD"
 
-[storage.external.Portable.backup]
-root = "/Volumes/PortableSSD Backup"
+[inbox.backup2.Home]
+root = "/Volumes/aisv backup"
 
-[storage.external.Portable.backup2]
-root = "/Volumes/PortableSSD Backup2"
+[archive.backup.Home]
+root = "/Volumes/Extreme SSD"
+
+[archive.backup2.Home]
+root = "/Volumes/aisv backup"
+
+[databases.backup.Home]
+root = "/Volumes/Extreme SSD"
+
+[databases.backup2.Home]
+root = "/Volumes/aisv backup"
+
+# ----------------------------
+# Prec
+# ----------------------------
+[storage.backup.Prec]
+root = "/Volumes/aisv backup"
+
+[storage.backup2.Prec]
+root = "/Volumes/aisv backup2"
+
+[inbox.backup.Prec]
+root = "/Volumes/aisv backup"
+
+[inbox.backup2.Prec]
+root = "/Volumes/aisv backup2"
+
+[archive.backup.Prec]
+root = "/Volumes/aisv backup"
+
+[archive.backup2.Prec]
+root = "/Volumes/aisv backup2"
+
+[databases.backup.Prec]
+root = "/Volumes/aisv backup"
+
+[databases.backup2.Prec]
+root = "/Volumes/aisv backup2"
+
+# ----------------------------
+# Portable
+# ----------------------------
+[storage.backup.Portable]
+root = "/Volumes/Extreme SSD"
+
+[storage.backup2.Portable]
+root = "/Volumes/Extreme SSD2"
+
+[inbox.backup.Portable]
+root = "/Volumes/Extreme SSD"
+
+[inbox.backup2.Portable]
+root = "/Volumes/Extreme SSD2"
+
+[archive.backup.Portable]
+root = "/Volumes/Extreme SSD"
+
+[archive.backup2.Portable]
+root = "/Volumes/Extreme SSD2"
+
+[databases.backup.Portable]
+root = "/Volumes/Extreme SSD"
+
+[databases.backup2.Portable]
+root = "/Volumes/Extreme SSD2"
+
+
+# ============================================================
+# 旧設定（storage.external.*）
+# ※ 新設定（storage.backup.* / inbox.backup.* など）が正本
+# ※ 移行確認のため一時的にコメントアウト
+# ※ 問題なければ後日完全削除
+# ============================================================
+
+# [storage.external.Home.main]
+# root = "/Volumes/Extreme SSD"
+
+# [storage.external.Home.backup]
+# root = "/Volumes/Extreme SSD2"
+
+# [storage.external.Home.backup2]
+# root = "/Volumes/aisv backup"
+
+# [storage.external.Prec.main]
+# root = "/Volumes/PrecSSD"
+
+# [storage.external.Prec.backup]
+# root = "/Volumes/PrecSSD Backup"
+
+# [storage.external.Prec.backup2]
+# root = "/Volumes/PrecSSD Backup2"
+
+# [storage.external.Portable.main]
+# root = "/Volumes/Extreme SSD"
+
+# [storage.external.Portable.backup]
+# root = "/Volumes/PortableSSD Backup"
+
+# [storage.external.Portable.backup2]
+# root = "/Volumes/PortableSSD Backup2"
