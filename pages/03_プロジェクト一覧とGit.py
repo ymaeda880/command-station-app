@@ -27,6 +27,14 @@ st.caption(
 st.info(f"現在の project_root: `{PROJECT_ROOT}`")
 
 # ------------------------------------------------------------
+# 初回表示時の自動 fetch
+# ------------------------------------------------------------
+AUTO_FETCH_STATE_KEY = "auto_fetch_all_prune_done_03_git_page"
+
+if AUTO_FETCH_STATE_KEY not in st.session_state:
+    st.session_state[AUTO_FETCH_STATE_KEY] = False
+
+# ------------------------------------------------------------
 # 0) ユーティリティ
 # ------------------------------------------------------------
 def _dir_is_effectively_empty(path: Path) -> bool:
@@ -57,6 +65,36 @@ with st.sidebar:
 # 1) プロジェクト走査＋Git情報取得（.gitサイズ表示対応版）
 # ------------------------------------------------------------
 df = apps_git_dataframe(PROJECT_ROOT)
+
+# ------------------------------------------------------------
+# 初回表示時のみ fetch --all --prune を自動実行
+# ------------------------------------------------------------
+if not st.session_state.get(AUTO_FETCH_STATE_KEY, False):
+    st.info("初回表示のため、GitHub側の最新情報を取得しています。")
+
+    fetch_logs = []
+
+    for _, rec in df.iterrows():
+        if not rec.get("is_repo", False):
+            continue
+
+        code, out, err = git("fetch --all --prune", cwd=rec["path"])
+        fetch_logs.append({
+            "name": rec.get("name", ""),
+            "path": str(rec.get("path", "")),
+            "code": code,
+            "output": out or err or "(no output)",
+        })
+
+    st.session_state[AUTO_FETCH_STATE_KEY] = True
+
+    with st.expander("初回自動 fetch の結果", expanded=False):
+        for item in fetch_logs:
+            st.markdown(f"**{item['name']}** — `{item['path']}`")
+            st.code(item["output"], language="bash")
+
+    # fetch後の最新状態で再取得
+    df = apps_git_dataframe(PROJECT_ROOT)
 
 if df.empty:
     st.warning("対象フォルダが見つかりませんでした。`*_project` / `*_app` / `apps_portal` を確認してください。")
@@ -103,8 +141,32 @@ cols = ["名前", "種別", "ブランチ", "変更数", "↑ ahead", "↓ behin
 # 安全に存在チェックして不足列を除外
 cols = [c for c in cols if c in df_display.columns]
 
-# 一覧テーブル表示（横幅フィット）
-st.dataframe(df_display[cols], width='stretch')
+# ------------------------------------------------------------
+# 一覧テーブル表示（Git管理あり／なしで分割）
+# ------------------------------------------------------------
+if "Git管理" in df_display.columns:
+    df_git_true = df_display[df_display["Git管理"].astype(str) == "True"]
+    df_git_false = df_display[df_display["Git管理"].astype(str) == "False"]
+
+    st.markdown("### 🟢 Git管理あり")
+
+    st.caption(
+    "変更数 = 未commit変更数（working tree の変更） / "
+    "↑ ahead = 未push commit 数（ローカルだけに存在する commit） / "
+    "↓ behind = 未pull commit 数（GitHub側にのみ存在する commit）"
+)
+    if df_git_true.empty:
+        st.info("Git管理されている対象はありません。")
+    else:
+        st.dataframe(df_git_true[cols], width="stretch")
+
+    st.markdown("### ⚪ Git管理なし")
+    if df_git_false.empty:
+        st.info("Git管理されていない対象はありません。")
+    else:
+        st.dataframe(df_git_false[cols], width="stretch")
+else:
+    st.dataframe(df_display[cols], width="stretch")
 
 # 合計サイズのサマリ（任意）
 if "git_size_bytes" in df.columns:

@@ -30,7 +30,7 @@ root = "/Volumes/Extreme SSD/Storages"
 # Archive（main：長期保管）
 # ============================================================
 [archive.storage.external.Home]
-root = "/Volumes/Extreme SSD/Archive"
+root = "/Volumes/PAIS_HOME_SSD4TB/Archive"
 
 [archive.storage.external.Prec]
 root = "/Volumes/PrecSSD/Archive"
@@ -63,25 +63,25 @@ root = "/Volumes/Extreme SSD/Databases"
 # Home
 # ----------------------------
 [storage.backup.Home]
-root = "/Volumes/Extreme SSD"
+root = "/Volumes/PAIS_HOME_HD10TB"
 
 [storage.backup2.Home]
 root = "/Volumes/aisv backup"
 
 [inbox.backup.Home]
-root = "/Volumes/Extreme SSD"
+root = "/Volumes/PAIS_HOME_HD10TB"
 
 [inbox.backup2.Home]
 root = "/Volumes/aisv backup"
 
 [archive.backup.Home]
-root = "/Volumes/Extreme SSD"
+root = "/Volumes/PAIS_HOME_HD10TB"
 
 [archive.backup2.Home]
 root = "/Volumes/aisv backup"
 
 [databases.backup.Home]
-root = "/Volumes/Extreme SSD"
+root = "/Volumes/PAIS_HOME_HD10TB"
 
 [databases.backup2.Home]
 root = "/Volumes/aisv backup"
