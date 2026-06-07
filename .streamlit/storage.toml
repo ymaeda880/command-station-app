@@ -78,13 +78,13 @@ root = "/Volumes/aisv backup"
 root = "/Volumes/PAIS_HOME_HD10TB"
 
 [archive.backup2.Home]
-root = "/Volumes/aisv backup"
+root = "/Volumes/SYNC_HOME_HDD4TB"
 
 [databases.backup.Home]
 root = "/Volumes/PAIS_HOME_HD10TB"
 
 [databases.backup2.Home]
-root = "/Volumes/aisv backup"
+root = "/Volumes/SYNC_HOME_HDD4TB"
 
 # ----------------------------
 # Prec
@@ -139,6 +139,33 @@ root = "/Volumes/Extreme SSD"
 
 [databases.backup2.Portable]
 root = "/Volumes/Extreme SSD2"
+
+
+# ============================================================
+# 同期ルート（正本）
+# - 用途（archive / databases）× location（Home / Prec / Portable）
+# - root は「物理root」を指し、実フォルダ名
+# archive / databasesを同期する時の同期元のバックアップ装置のrootを設定
+# ============================================================
+
+[archive.sync.Home]
+root = "/Volumes/SYNC_HOME_HDD4TB"
+
+[databases.sync.Home]
+root = "/Volumes/SYNC_HOME_HDD4TB"
+
+[archive.sync.Portable]
+root = "/Volumes/SYNC_HOME_HDD4TB"
+
+[databases.sync.Portable]
+root = "/Volumes/SYNC_HOME_HDD4TB"
+
+[archive.sync.Prec]
+root = "/Volumes/SYNC_PREC_SSD4TB"
+
+[databases.sync.Prec]
+root = "/Volumes/SYNC_PREC_SSD4TB"
+
 
 
 # ============================================================

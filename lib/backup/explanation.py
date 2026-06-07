@@ -19,6 +19,56 @@ def _backup_explanation_text() -> str:
     """ダウンロード用の説明本文（プレーンテキスト）を返す。"""
     return """バックアップ（storages+auth / inbox）説明（latest + daily）
 
+⚠️　正本のパスのまとめ
+
+（１）当該パソコンの設定
+（command_station_app/.streamlit/secrets.toml）
+[env]
+location = "Home"
+このように設定すると，当該パソコンが「Home」に設定される．
+
+（２）データパスの種類
+(a) Archive：プロジェクト報告書など
+(b) Databases：RAGのDB
+(c) Storages：_admin（ログ），<ユーザー名>ユーザごとのサーバー内部保存用
+(d) InBoxStorages：InBox用
+(e) auth_portal_app/data/下：ユーザー情報，パスワードなど
+
+（３）データパスの解決方法（正本：main）
+・各データパス（main 正本）を internal に置くか external に置くかを決めるコードを
+（command_station_app/.streamlit/secrets.toml）に書く．
+例：Archiveをexternalに置くには，
+=====
+[archive]
+mode = "external"
+=====
+と書いておく．
+
+（４）実際のパス解決
+(a) internalはパソコンの内蔵SSDに保存する．
+(b) externalの時は外部の記憶装置に保存する
+(i) 例：HomeのArchiveの外部パスを設定方法：
+（command_station_app/.streamlit/storage.toml）に
+[archive.storage.external.Home]
+root = "/Volumes/PAIS_HOME_SSD4TB/Archive"
+と書く．この場合は，パソコンのUSB端子に接続されている「PAIS_HOME_SSD4TBn」にArchiveの正本を保存する．
+
+⚠️　バックアップのパスのまとめ
+
+（１）バックアップルート
+・バックアップルートは，backupとbackup2の２つのルートを設定する．
+例：HomeのStorageのbackupルートの設定方法：
+（command_station_app/.streamlit/storage.toml）に
+[storage.backup.Home]
+root = "/Volumes/PAIS_HOME_HD10TB"
+と書く．
+例２：PrecのArchiveのbackup2ルートの設定方法：
+[archive.backup2.Prec]
+root = "/Volumes/aisv backup2"
+と書く．
+
+🚧
+
 1. 目的
 ・プロジェクト配下の重要データを外付けSSDへ rsync でバックアップする。
 ・「latest（最新ミラー）」と「daily（時刻付きスナップショット）」を併用する。

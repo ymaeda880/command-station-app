@@ -22,6 +22,29 @@ st.info(f"現在の project_root: `{PROJECT_ROOT}`")
 
 st.warning("git cloneを行う時は，READMEやrequirements.txtなどを作成しない")
 
+st.markdown(
+    """
+⚠️ 初めてプロジェクトを作成する時<br>
+① プロジェクト名（例：sales-tools）を設定して，「xxx_project/xxx_appを作成」ボタンを押す．<br>
+その際には「READMEなどを作成」にチェックを入れておく．<br>
+② 作成したフォルダーを選択して，「仮想領域を作成する」から.venvを作成する．<br>
+<br>
+⚠️ 初めてGitからプログラムをcloneする時<br>
+① プロジェクト名（例：sales-tools）を設定して，「xxx_project/xxx_appを作成」ボタンを押す．<br>
+その際には「READMEなどを作成」に<b>チェックを外して</b>おく．<br>
+② <b>「プロジェクト一覧とGit」ページ</b>に移動．<br>
+③ 作成したフォルダーを「操作対象」に選ぶ．<br>
+④ 「最初のclone」から「リポジトリURL」を設定して，最初のcloneを行う．<br>
+⑤ <b>「python仮想環境構築」ページ</b>に移動する．<br>
+⑥ 対象フォルダに設定し，仮想環境を設定する．<br>
+⑦ streamlitのバージョンを設定する．<br>
+⑧ VSCodeからsource .venv/bin/activate，pip install -r requirements.txtを行う．<br>
+<br>
+⚠️ ２度目以降にGitからpullをする時<br>
+""",
+    unsafe_allow_html=True,
+)
+
 # ============================================================
 # 0) 新規プロジェクト雛形の作成: xxx → PROJECT_ROOT/xxx_project/xxx_app
 # ============================================================

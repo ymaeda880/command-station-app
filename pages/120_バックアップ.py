@@ -375,6 +375,7 @@ _show_probe("databases（purpose=databases）", probe_databases)
 # ============================================================
 st.divider()
 st.subheader("① storages + auth バックアップ（latest + daily）")
+st.caption("auth：<projects_root>/auth_portal_project/auth_portal_app/data")
 
 use_link_dest_sa = st.checkbox(
     "（storages+auth）daily は差分（--link-dest）で節約",
