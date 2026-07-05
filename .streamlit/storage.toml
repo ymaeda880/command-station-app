@@ -33,10 +33,10 @@ root = "/Volumes/Extreme SSD/Storages"
 root = "/Volumes/PAIS_HOME_SSD4TB/Archive"
 
 [archive.storage.external.Prec]
-root = "/Volumes/PrecSSD/Archive"
+root = "/Volumes/PAIS_PREC_SSD4TB/Archive"
 
 [archive.storage.external.Portable]
-root = "/Volumes/Extreme SSD/Archive"
+root = "/Volumes/PAIS_HOME_SSD4TB/Archive"
 
 
 # ============================================================

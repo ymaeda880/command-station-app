@@ -397,23 +397,25 @@ st.write("バックアップ対象：")
 st.write(f"- storages: `{storages_src}`")
 st.write(f"- auth    : `{auth_src}`")
 
-enabled_sa = [(r.role, r.path) for r in probe_storage if r.path is not None]
-if not enabled_sa:
-    st.error("（storages+auth）接続中のバックアップ先SSDがありません")
-    st.stop()
 
-cols_sa = st.columns(len(enabled_sa))
+enabled_sa = [(r.role, r.path) for r in probe_storage if r.path is not None]
 clicked_sa: Optional[Tuple[str, Path]] = None
 
-for i, (role, mount) in enumerate(enabled_sa):
-    with cols_sa[i]:
-        if st.button(
-            f"{role} へ（storages+auth）",
-            disabled=_any_running(),
-            type="primary",
-            key=f"{PAGE_NAME}__btn_sa_{role}",
-        ):
-            clicked_sa = (role, mount)
+if not enabled_sa:
+    st.warning("（storages+auth）接続中のバックアップ先SSDがありません。このセクションはスキップします。")
+else:
+    cols_sa = st.columns(len(enabled_sa))
+
+    for i, (role, mount) in enumerate(enabled_sa):
+        with cols_sa[i]:
+            if st.button(
+                f"{role} へ（storages+auth）",
+                disabled=_any_running(),
+                type="primary",
+                key=f"{PAGE_NAME}__btn_sa_{role}",
+            ):
+                clicked_sa = (role, mount)
+
 
 if clicked_sa:
     role, mount = clicked_sa
@@ -464,23 +466,24 @@ confirm_in = st.checkbox(
 st.write("バックアップ対象：")
 st.write(f"- inbox: `{inbox_src}`")
 
-enabled_in = [(r.role, r.path) for r in probe_inbox if r.path is not None]
-if not enabled_in:
-    st.error("（inbox）接続中のバックアップ先SSDがありません")
-    st.stop()
 
-cols_in = st.columns(len(enabled_in))
+enabled_in = [(r.role, r.path) for r in probe_inbox if r.path is not None]
 clicked_in: Optional[Tuple[str, Path]] = None
 
-for i, (role, mount) in enumerate(enabled_in):
-    with cols_in[i]:
-        if st.button(
-            f"{role} へ（inbox）",
-            disabled=_any_running(),
-            type="primary",
-            key=f"{PAGE_NAME}__btn_in_{role}",
-        ):
-            clicked_in = (role, mount)
+if not enabled_in:
+    st.warning("（inbox）接続中のバックアップ先SSDがありません。このセクションはスキップします。")
+else:
+    cols_in = st.columns(len(enabled_in))
+
+    for i, (role, mount) in enumerate(enabled_in):
+        with cols_in[i]:
+            if st.button(
+                f"{role} へ（inbox）",
+                disabled=_any_running(),
+                type="primary",
+                key=f"{PAGE_NAME}__btn_in_{role}",
+            ):
+                clicked_in = (role, mount)
 
 if clicked_in:
     role, mount = clicked_in
@@ -531,22 +534,22 @@ st.write("バックアップ対象：")
 st.write(f"- archive: `{archive_src}`")
 
 enabled_ar = [(r.role, r.path) for r in probe_archive if r.path is not None]
-if not enabled_ar:
-    st.error("（archive）接続中のバックアップ先SSDがありません")
-    st.stop()
-
-cols_ar = st.columns(len(enabled_ar))
 clicked_ar: Optional[Tuple[str, Path]] = None
 
-for i, (role, mount) in enumerate(enabled_ar):
-    with cols_ar[i]:
-        if st.button(
-            f"{role} へ（archive）",
-            disabled=_any_running(),
-            type="primary",
-            key=f"{PAGE_NAME}__btn_ar_{role}",
-        ):
-            clicked_ar = (role, mount)
+if not enabled_ar:
+    st.warning("（archive）接続中のバックアップ先SSDがありません。このセクションはスキップします。")
+else:
+    cols_ar = st.columns(len(enabled_ar))
+
+    for i, (role, mount) in enumerate(enabled_ar):
+        with cols_ar[i]:
+            if st.button(
+                f"{role} へ（archive）",
+                disabled=_any_running(),
+                type="primary",
+                key=f"{PAGE_NAME}__btn_ar_{role}",
+            ):
+                clicked_ar = (role, mount)
 
 if clicked_ar:
     role, mount = clicked_ar
@@ -597,22 +600,22 @@ st.write("バックアップ対象：")
 st.write(f"- databases: `{db_src}`")
 
 enabled_db = [(r.role, r.path) for r in probe_databases if r.path is not None]
-if not enabled_db:
-    st.error("（databases）接続中のバックアップ先SSDがありません")
-    st.stop()
-
-cols_db = st.columns(len(enabled_db))
 clicked_db: Optional[Tuple[str, Path]] = None
 
-for i, (role, mount) in enumerate(enabled_db):
-    with cols_db[i]:
-        if st.button(
-            f"{role} へ（databases）",
-            disabled=_any_running(),
-            type="primary",
-            key=f"{PAGE_NAME}__btn_db_{role}",
-        ):
-            clicked_db = (role, mount)
+if not enabled_db:
+    st.warning("（databases）接続中のバックアップ先SSDがありません。このセクションはスキップします。")
+else:
+    cols_db = st.columns(len(enabled_db))
+
+    for i, (role, mount) in enumerate(enabled_db):
+        with cols_db[i]:
+            if st.button(
+                f"{role} へ（databases）",
+                disabled=_any_running(),
+                type="primary",
+                key=f"{PAGE_NAME}__btn_db_{role}",
+            ):
+                clicked_db = (role, mount)
 
 if clicked_db:
     role, mount = clicked_db

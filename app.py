@@ -25,16 +25,21 @@ st.markdown("""
 使用方法（projectの作成）
 ---
 
-**新たにprojectを作成するとき**
+**新たにprojectを作成するとき（Homeにおける処理）**
 
 1. [python仮想環境構築]で，アプリのフォルダを作る（READMEなども同時作成）
 1. [python仮想環境構築]で，仮想環境を構築
             
-**git cloneするprojectを作成するとき**            
+**git cloneするprojectを作成するとき（PrecおよびPortableにおける処理）**            
 1. [python仮想環境構築]で，アプリのフォルダを作る（READMEなどは作成しない）
-1. [プロジェクト一覧とGit]でgit clone
+1. [プロジェクト一覧とGit]でgit clone（「選択先にclone」ボタンを押す）
 1. [python仮想環境構築]で，仮想環境を構築
 1. [インストール用コマンド] install実行
+
+使用方法（日常的使用法）
+---
+1. push：[プロジェクト一覧とGit]の[日常(push)]でpush（Homeにおける処理）
+1. pull：[プロジェクト一覧とGit]の[日常(pull)]でpull（PrecおよびPortableにおける処理）
 
 使用方法（projectのデプロイ）
 ---
