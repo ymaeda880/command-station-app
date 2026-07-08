@@ -89,7 +89,7 @@ import streamlit as st
 # page config（最初に1回だけ）
 # ============================================================
 st.set_page_config(
-    page_title="バックアップ（用途別）",
+    page_title="Command Station",
     page_icon="💾",
     layout="wide",
 )
@@ -132,7 +132,10 @@ from common_lib.auth.paths import resolve_auth_data_root
 # ============================================================
 # app lib
 # ============================================================
-from lib.backup.explanation import render_backup_explanation
+from lib.backup.explanation import (
+    render_backup_page_intro,
+    render_backup_explanation,
+)
 
 # ============================================================
 # バナー表示（共通UI）
@@ -184,18 +187,23 @@ except Exception as e:
 left, right = st.columns([2, 1])
 
 with left:
-    st.title("💾 バックアップ（用途別：storages/auth・inbox・archive・databases）")
-    st.caption(
-        f"バックアップはバックアップSSD側の "
-        f"aisv_Backups/{loc}/backups/ に用途別で分離して保存します。"
-    )
-
+    st.title("💾 バックアップ")
+    
 with right:
     st.success(f"✅ 管理者ログイン中: **{sub_admin}**")
 
 subtitle("バックアップ実行ページ")
 
+# ------------------------------------------------------------
+# ページ説明
+# ------------------------------------------------------------
+render_backup_page_intro()
+
+# ------------------------------------------------------------
+# 詳細説明
+# ------------------------------------------------------------
 render_backup_explanation()
+
 st.caption(
     "保存先: "
     f"`<SSD>/aisv_Backups/{loc}/backups/<name>/{{latest,daily,logs}}`"
@@ -203,9 +211,9 @@ st.caption(
 )
 
 st.write(f"- location: **{loc}**")
-st.write(f"- projects_root: `{PROJECTS_ROOT}`")
-st.write(f"- app_name: `{APP_NAME}`")
-st.write(f"- page_name: `{PAGE_NAME}`")
+#st.write(f"- projects_root: `{PROJECTS_ROOT}`")
+#st.write(f"- app_name: `{APP_NAME}`")
+#st.write(f"- page_name: `{PAGE_NAME}`")
 st.write(f"- backup_root: `<SSD>/aisv_Backups/{loc}/backups/`")
 
 # ============================================================
@@ -236,7 +244,19 @@ class RunResult:
 
 
 def sh(cmd: list[str]) -> RunResult:
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    # ------------------------------------------------------------
+    # rsync の出力には、古いファイル名や外部SSD由来の文字コードで
+    # UTF-8として読めないバイト列が混じることがある。
+    # text=True の既定decodeで落ちないよう、errors="replace" で読む。
+    # ------------------------------------------------------------
+    p = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
     return RunResult(
         ok=(p.returncode == 0),
         returncode=p.returncode,
@@ -244,6 +264,162 @@ def sh(cmd: list[str]) -> RunResult:
         stderr=p.stderr or "",
         cmd=cmd,
     )
+
+
+# ============================================================
+# rsync dry-run 出力整理
+# ============================================================
+def _show_dry_run_summary(stdout: str) -> None:
+    """
+    rsync -ani の出力を整理して表示する。
+
+    表示：
+        追加
+        更新
+        削除
+
+    itemize の詳細は表示せず，
+    ファイル名だけを一覧表示する。
+    """
+    added: list[str] = []
+    updated: list[str] = []
+    deleted: list[str] = []
+
+    for line in stdout.splitlines():
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if line.startswith("*deleting "):
+            deleted.append(line.removeprefix("*deleting ").strip())
+            continue
+
+        # itemize + ファイル名
+        parts = line.split(maxsplit=1)
+
+        if len(parts) != 2:
+            continue
+
+        item, path = parts
+
+        # ------------------------------------------------------------
+        # rsync が出力する "./"（ルートディレクトリ属性変更）は
+        # 利用者には意味がないため表示しない。
+        # ------------------------------------------------------------
+        if path == "./":
+            continue
+
+        if "+++++++++" in item:
+            added.append(path)
+        else:
+            updated.append(path)
+
+    if added:
+        st.markdown(f"**追加（{len(added)}件）**")
+        st.code("\n".join(added))
+
+    if updated:
+        st.markdown(f"**更新（{len(updated)}件）**")
+        st.code("\n".join(updated))
+
+    if deleted:
+        st.markdown(f"**削除（{len(deleted)}件）**")
+        st.code("\n".join(deleted))
+
+    if not (added or updated or deleted):
+        st.success("変更はありません。")
+
+
+# ============================================================
+# rsync itemize 出力のTXTログ用整理
+# ============================================================
+def build_rsync_summary_text(stdout: str) -> str:
+    """
+    rsync --itemize-changes の出力を、
+    TXTログ用に「追加・更新・削除・ディレクトリ変更」へ整理する。
+
+    画面表示は既存の _show_dry_run_summary() を使う。
+    この関数は、ダウンロードTXTの内容を分かりやすくするためだけに使う。
+    """
+    added: list[str] = []
+    updated: list[str] = []
+    deleted: list[str] = []
+    dirs: list[str] = []
+
+    for line in stdout.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if line.startswith("*deleting "):
+            path = line.removeprefix("*deleting ").strip()
+            if path and path != "./":
+                deleted.append(path)
+            continue
+
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+
+        item, path = parts
+
+        if path == "./":
+            continue
+
+        if item.startswith(".d"):
+            dirs.append(path)
+            continue
+
+        if item.startswith(">f") and "+++++++++" in item:
+            added.append(path)
+            continue
+
+        if item.startswith(">f"):
+            updated.append(path)
+            continue
+
+    lines: list[str] = []
+
+    lines.append("追加")
+    lines.append("----------------------------------------")
+    lines.append(f"{len(added)}件")
+    if added:
+        lines.extend(added)
+    else:
+        lines.append("なし")
+    lines.append("")
+
+    lines.append("更新")
+    lines.append("----------------------------------------")
+    lines.append(f"{len(updated)}件")
+    if updated:
+        lines.extend(updated)
+    else:
+        lines.append("なし")
+    lines.append("")
+
+    lines.append("削除")
+    lines.append("----------------------------------------")
+    lines.append(f"{len(deleted)}件")
+    if deleted:
+        lines.extend(deleted)
+    else:
+        lines.append("なし")
+    lines.append("")
+
+    lines.append("ディレクトリ変更")
+    lines.append("----------------------------------------")
+    lines.append(f"{len(dirs)}件")
+    if dirs:
+        lines.extend(dirs)
+    else:
+        lines.append("なし")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 def fmt_cmd(cmd: list[str]) -> str:
@@ -265,17 +441,68 @@ def backup_sets(
     backup_sets: list[dict],
     use_link_dest: bool,
     dry_run: bool,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str]:
     """
     指定した backup_sets を、指定 mount に対して latest + daily で実行する。
-    失敗したら (False, reason) を返す。成功なら (True, None)。
+
+    dry-run:
+        - ファイル・フォルダを一切作成しない
+        - rsync の差分確認だけ行う
+
+    通常実行:
+        - latest / daily / logs を作成する
+        - latest を完全ミラー更新する
+        - daily スナップショットを作成する
     """
     root = mount / "aisv_Backups" / str(location) / "backups"
-    ensure_dir(root)
 
-    rsync_base = ["rsync", "-a"]
+    log_lines: list[str] = []
+
+    log_lines.append("========================================")
+    log_lines.append("Backup Result")
+    log_lines.append(f"time     : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log_lines.append(f"location : {location}")
+    log_lines.append(f"mount    : {mount}")
+    log_lines.append(f"dry_run  : {dry_run}")
+    log_lines.append("========================================")
+    log_lines.append("")  
+
+    # ------------------------------------------------------------
+    # dry-run ではディレクトリを作成しない。
+    # 通常実行時のみバックアップ先ルートを作成する。
+    # ------------------------------------------------------------
+    if not dry_run:
+        ensure_dir(root)
+
+    # ------------------------------------------------------------
+    # Homebrew版 rsync を使用する。
+    # ------------------------------------------------------------
+    RSYNC = "/opt/homebrew/bin/rsync"
+
+    # ------------------------------------------------------------
+    # rsync 実行オプション
+    #
+    # dry-run:
+    #   - 実際にはコピー・削除しない
+    #   - 差分確認用に itemize 出力を出す
+    #
+    # 通常実行:
+    #   - 実際にコピー・削除する
+    #   - 実行結果として、追加・更新・削除されたファイル名を残す
+    #
+    # 重要：
+    #   通常実行でも --itemize-changes を付ける。
+    #   これを付けないと、TXTログにバックアップされたファイル名が残らない。
+    # ------------------------------------------------------------
     if dry_run:
-        rsync_base.append("--dry-run")
+        rsync_base = [RSYNC, "-ani", "--dry-run"]
+    else:
+        rsync_base = [RSYNC, "-a", "--itemize-changes"]
+
+    rsync_excludes = [
+        "--exclude=.DS_Store",
+        "--exclude=_preview_cache/",
+    ]
 
     for s in backup_sets:
         name = str(s["name"])
@@ -286,36 +513,135 @@ def backup_sets(
         daily = base / "daily" / now_stamp()
         logs = base / "logs"
 
-        ensure_dir(latest)
-        ensure_dir(daily)
-        ensure_dir(logs)
+        # ------------------------------------------------------------
+        # dry-run では latest / daily / logs を作成しない。
+        # 通常実行時のみ必要な保存先を作成する。
+        # ------------------------------------------------------------
+        if not dry_run:
+            ensure_dir(latest)
+            ensure_dir(daily)
+            ensure_dir(logs)
 
-        cmd_latest = rsync_base + ["--delete", f"{src}/", f"{latest}/"]
+        cmd_latest = rsync_base + rsync_excludes + [
+            "--delete",
+            f"{src}/",
+            f"{latest}/",
+        ]
+
         st.write(f"#### {name} / latest")
         st.code(fmt_cmd(cmd_latest), language="bash")
+
+
+        log_lines.append(f"### {name} / latest")
+        log_lines.append("")
+        log_lines.append("[command]")
+        log_lines.append(fmt_cmd(cmd_latest))
+        log_lines.append("")
+
         r1 = sh(cmd_latest)
+
+        log_lines.append("[returncode]")
+        log_lines.append(str(r1.returncode))
+        log_lines.append("")
+
+        # ------------------------------------------------------------
+        # latest の実行結果をTXTログ用に整理する。
+        # 画面表示は既存処理のまま変更しない。
+        # ------------------------------------------------------------
+        if r1.stdout:
+            log_lines.append("[summary]")
+            log_lines.append(build_rsync_summary_text(r1.stdout))
+            log_lines.append("")
+
+            log_lines.append("[rsync raw stdout]")
+            log_lines.append(r1.stdout.rstrip())
+            log_lines.append("")
+
+        if r1.stderr:
+            log_lines.append("[stderr]")
+            log_lines.append(r1.stderr.rstrip())
+            log_lines.append("")
+
+
+        if dry_run:
+            _show_dry_run_summary(r1.stdout)
+
         if not r1.ok:
             st.error(f"{name}: latest 失敗（returncode={r1.returncode}）")
             if r1.stderr:
                 st.text(r1.stderr)
-            return False, f"{name}: latest failed"
+            return False, f"{name}: latest failed", "\n".join(log_lines)
+        
+        # ------------------------------------------------------------
+        # dry-run では latest の差分確認のみ行う。
+        # daily は毎回新しいタイムスタンプフォルダを作成する設計のため、
+        # dry-run では必ず「directory .../daily/時刻」が表示され、
+        # 利用者にとって有益な情報にならない。
+        # ------------------------------------------------------------
+        if dry_run:
+            log_lines.append("----------------------------------------")
+            log_lines.append("")
+            continue
 
         cmd_daily = rsync_base.copy()
-        if use_link_dest:
+
+        # ------------------------------------------------------------
+        # daily は latest を基準に --link-dest で差分節約する。
+        # dry-run でも rsync 側の確認だけは行う。
+        # ただし Python 側では daily フォルダを作成しない。
+        # ------------------------------------------------------------
+        if bool(use_link_dest):
             cmd_daily += ["--link-dest", str(latest)]
-        cmd_daily += [f"{src}/", f"{daily}/"]
+
+        cmd_daily += rsync_excludes + [
+            f"{src}/",
+            f"{daily}/",
+        ]
 
         st.write(f"#### {name} / daily")
         st.code(fmt_cmd(cmd_daily), language="bash")
+
+        log_lines.append(f"### {name} / daily")
+        log_lines.append("")
+        log_lines.append("[command]")
+        log_lines.append(fmt_cmd(cmd_daily))
+        log_lines.append("")
+
         r2 = sh(cmd_daily)
+
+        log_lines.append("[returncode]")
+        log_lines.append(str(r2.returncode))
+        log_lines.append("")
+
+        # ------------------------------------------------------------
+        # daily の実行結果をTXTログ用に整理する。
+        # 画面表示は既存処理のまま変更しない。
+        # ------------------------------------------------------------
+        if r2.stdout:
+            log_lines.append("[summary]")
+            log_lines.append(build_rsync_summary_text(r2.stdout))
+            log_lines.append("")
+
+            log_lines.append("[rsync raw stdout]")
+            log_lines.append(r2.stdout.rstrip())
+            log_lines.append("")
+
+        if r2.stderr:
+            log_lines.append("[stderr]")
+            log_lines.append(r2.stderr.rstrip())
+            log_lines.append("")
+
+        if dry_run and r2.stdout:
+            _show_dry_run_summary(r2.stdout)
+
         if not r2.ok:
             st.error(f"{name}: daily 失敗（returncode={r2.returncode}）")
             if r2.stderr:
                 st.text(r2.stderr)
-            return False, f"{name}: daily failed"
+            return False, f"{name}: daily failed", "\n".join(log_lines)
 
-    return True, None
-
+    log_lines.append("Completed successfully.")
+    return True, None, "\n".join(log_lines)
 
 # ============================================================
 # 実行中フラグ（セクション別）
@@ -343,6 +669,46 @@ def _any_running() -> bool:
         or st.session_state[KEY_RUNNING_DATABASES]
     )
 
+# ============================================================
+# バックアップ結果表示 + TXTダウンロード
+# ============================================================
+def render_backup_result(
+    *,
+    section_key: str,
+    title: str,
+    role: str,
+    mount: Path,
+    ok: bool,
+    reason: str | None,
+    log_text: str,
+    dry_run: bool,
+) -> None:
+    """
+    バックアップ結果を画面に表示し、
+    実行ログをTXTで保存できるようにする。
+    """
+    if ok:
+        if dry_run:
+            st.info(
+                f"（{title}）Dry-run が正常終了しました"
+                f"（コピー・削除は実行していません）（role={role}, mount={mount}）"
+            )
+        else:
+            st.success(
+                f"（{title}）バックアップが完了しました"
+                f"（role={role}, mount={mount}）"
+            )
+    else:
+        st.error(f"（{title}）バックアップ失敗：{reason}")
+
+    if log_text:
+        st.download_button(
+            "結果をTXTで保存",
+            data=log_text,
+            file_name=f"backup_result_{section_key}_{role}_{now_stamp()}.txt",
+            mime="text/plain",
+            key=f"{PAGE_NAME}__download_{section_key}_{role}",
+        )
 
 # ============================================================
 # SSD 判定（用途別：B確定）— probe を完全統一
@@ -419,12 +785,21 @@ else:
 
 if clicked_sa:
     role, mount = clicked_sa
-    if not confirm_sa:
+    if (not dry_run_sa) and (not confirm_sa):
         st.error("（storages+auth）確認チェックをオンにしてください")
     else:
         st.session_state[KEY_RUNNING_STORAGE] = True
         try:
-            ok, reason = backup_sets(
+            # ------------------------------------------------------------
+            # バックアップを実行する。
+            #
+            # 戻り値
+            #   ok       : 実行成功なら True
+            #   reason   : エラー理由
+            #   log_text : ダウンロード用ログ
+            # ------------------------------------------------------------
+
+            ok, reason, log_text = backup_sets(
                 mount=mount,
                 location=loc,
                 backup_sets=[
@@ -434,10 +809,18 @@ if clicked_sa:
                 use_link_dest=bool(use_link_dest_sa),
                 dry_run=bool(dry_run_sa),
             )
-            if ok:
-                st.success(f"（storages+auth）バックアップが完了しました（role={role}, mount={mount}）")
-            else:
-                st.error(f"（storages+auth）バックアップ失敗：{reason}")
+
+            render_backup_result(
+                section_key="storages_auth",
+                title="storages+auth",
+                role=role,
+                mount=mount,
+                ok=ok,
+                reason=reason,
+                log_text=log_text,
+                dry_run=bool(dry_run_sa),
+            )
+
         finally:
             st.session_state[KEY_RUNNING_STORAGE] = False
 
@@ -487,12 +870,21 @@ else:
 
 if clicked_in:
     role, mount = clicked_in
-    if not confirm_in:
+    if (not dry_run_in) and (not confirm_in):
         st.error("（inbox）確認チェックをオンにしてください")
     else:
         st.session_state[KEY_RUNNING_INBOX] = True
         try:
-            ok, reason = backup_sets(
+            # ------------------------------------------------------------
+            # バックアップを実行する。
+            #
+            # 戻り値
+            #   ok       : 実行成功なら True
+            #   reason   : エラー理由
+            #   log_text : ダウンロード用ログ
+            # ------------------------------------------------------------
+
+            ok, reason, log_text = backup_sets(
                 mount=mount,
                 location=loc,
                 backup_sets=[
@@ -501,10 +893,18 @@ if clicked_in:
                 use_link_dest=bool(use_link_dest_in),
                 dry_run=bool(dry_run_in),
             )
-            if ok:
-                st.success(f"（inbox）バックアップが完了しました（role={role}, mount={mount}）")
-            else:
-                st.error(f"（inbox）バックアップ失敗：{reason}")
+
+            render_backup_result(
+                section_key="inbox",
+                title="inbox",
+                role=role,
+                mount=mount,
+                ok=ok,
+                reason=reason,
+                log_text=log_text,
+                dry_run=bool(dry_run_in),
+            )
+
         finally:
             st.session_state[KEY_RUNNING_INBOX] = False
 
@@ -513,6 +913,7 @@ if clicked_in:
 # ============================================================
 st.divider()
 st.subheader("③ archive バックアップ（latest + daily）")
+st.info("同期用DBにも使用")
 
 use_link_dest_ar = st.checkbox(
     "（archive）daily は差分（--link-dest）で節約",
@@ -553,12 +954,24 @@ else:
 
 if clicked_ar:
     role, mount = clicked_ar
-    if not confirm_ar:
+    # ------------------------------------------------------------
+    # Dry-run は実際には書き込みを行わないため、
+    # 確認チェックは不要とする。
+    # ------------------------------------------------------------
+    if (not dry_run_ar) and (not confirm_ar):
         st.error("（archive）確認チェックをオンにしてください")
     else:
         st.session_state[KEY_RUNNING_ARCHIVE] = True
         try:
-            ok, reason = backup_sets(
+            # ------------------------------------------------------------
+            # バックアップを実行する。
+            #
+            # 戻り値
+            #   ok       : 実行成功なら True
+            #   reason   : エラー理由
+            #   log_text : ダウンロード用ログ
+            # ------------------------------------------------------------
+            ok, reason, log_text = backup_sets(
                 mount=mount,
                 location=loc,
                 backup_sets=[
@@ -567,10 +980,18 @@ if clicked_ar:
                 use_link_dest=bool(use_link_dest_ar),
                 dry_run=bool(dry_run_ar),
             )
-            if ok:
-                st.success(f"（archive）バックアップが完了しました（role={role}, mount={mount}）")
-            else:
-                st.error(f"（archive）バックアップ失敗：{reason}")
+
+            render_backup_result(
+                section_key="archive",
+                title="archive",
+                role=role,
+                mount=mount,
+                ok=ok,
+                reason=reason,
+                log_text=log_text,
+                dry_run=bool(dry_run_ar),
+            )
+
         finally:
             st.session_state[KEY_RUNNING_ARCHIVE] = False
 
@@ -579,6 +1000,7 @@ if clicked_ar:
 # ============================================================
 st.divider()
 st.subheader("④ databases バックアップ（latest + daily）")
+st.info("同期用DBにも使用")
 
 use_link_dest_db = st.checkbox(
     "（databases）daily は差分（--link-dest）で節約",
@@ -619,12 +1041,20 @@ else:
 
 if clicked_db:
     role, mount = clicked_db
-    if not confirm_db:
+    if (not dry_run_db) and (not confirm_db):
         st.error("（databases）確認チェックをオンにしてください")
     else:
         st.session_state[KEY_RUNNING_DATABASES] = True
         try:
-            ok, reason = backup_sets(
+            # ------------------------------------------------------------
+            # バックアップを実行する。
+            #
+            # 戻り値
+            #   ok       : 実行成功なら True
+            #   reason   : エラー理由
+            #   log_text : ダウンロード用ログ
+            # ------------------------------------------------------------
+            ok, reason, log_text = backup_sets(
                 mount=mount,
                 location=loc,
                 backup_sets=[
@@ -633,10 +1063,17 @@ if clicked_db:
                 use_link_dest=bool(use_link_dest_db),
                 dry_run=bool(dry_run_db),
             )
-            if ok:
-                st.success(f"（databases）バックアップが完了しました（role={role}, mount={mount}）")
-            else:
-                st.error(f"（databases）バックアップ失敗：{reason}")
+
+            render_backup_result(
+                section_key="databases",
+                title="databases",
+                role=role,
+                mount=mount,
+                ok=ok,
+                reason=reason,
+                log_text=log_text,
+                dry_run=bool(dry_run_db),
+            )
         finally:
             st.session_state[KEY_RUNNING_DATABASES] = False
 

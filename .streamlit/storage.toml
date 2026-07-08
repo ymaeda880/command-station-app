@@ -1,7 +1,15 @@
 # command_station_app/.streamlit/storage.toml
 
+
 # ============================================================
-# InBoxStorages（main）
+#
+# ＜＜＜＜＜メインルート（externalの時）＞＞＞＞＞
+#
+# ============================================================
+
+# ============================================================
+# InBoxStorages（main）（externalの時）
+# (ここは現状はinternalで運用)
 # ============================================================
 [inbox.storage.external.Home]
 root = "/Volumes/Extreme SSD/InBoxStorages"
@@ -12,9 +20,9 @@ root = "/Volumes/PrecSSD/InBoxStorages"
 [inbox.storage.external.Portable]
 root = "/Volumes/Extreme SSD/InBoxStorages"
 
-
 # ============================================================
-# Storages（main：notes / ai_memo / minutes / bot 共通）
+# Storages（main：notes / ai_memo / minutes / bot 共通）（externalの時）
+# (ここは現状はinternalで運用)
 # ============================================================
 [storages.storage.external.Home]
 root = "/Volumes/Extreme SSD/Storages"
@@ -25,9 +33,9 @@ root = "/Volumes/PrecSSD/Storages"
 [storages.storage.external.Portable]
 root = "/Volumes/Extreme SSD/Storages"
 
-
 # ============================================================
-# Archive（main：長期保管）
+# Archive（main：長期保管）（externalの時）
+# (ここは現状はexternalで運用)
 # ============================================================
 [archive.storage.external.Home]
 root = "/Volumes/PAIS_HOME_SSD4TB/Archive"
@@ -38,10 +46,10 @@ root = "/Volumes/PAIS_PREC_SSD4TB/Archive"
 [archive.storage.external.Portable]
 root = "/Volumes/PAIS_HOME_SSD4TB/Archive"
 
-
 # ============================================================
-# Databases（main：RAG / 各種DB保管）
+# Databases（main：RAG / 各種DB保管）（externalの時）
 # 実フォルダ名：Databases
+# (ここは現状はinternalで運用)
 # ============================================================
 [databases.storage.external.Home]
 root = "/Volumes/Extreme SSD/Databases"
@@ -54,7 +62,7 @@ root = "/Volumes/Extreme SSD/Databases"
 
 
 # ============================================================
-# バックアップルート（新設定：正本）
+# ＜＜＜＜＜＜バックアップルート（新設定：正本）＞＞＞＞＞＞
 # - 用途（storage / inbox / archive / databases）× role（backup / backup2）× location（Home / Prec / Portable）
 # - root は「物理root」を指し、実フォルダ名（InBoxStorages/Storages/Archive/Databases）は用途側で付与する運用
 # ============================================================
@@ -74,11 +82,14 @@ root = "/Volumes/PAIS_HOME_HD10TB"
 [inbox.backup2.Home]
 root = "/Volumes/aisv backup"
 
+# ----Archive Backup Root-----
 [archive.backup.Home]
 root = "/Volumes/PAIS_HOME_HD10TB"
 
 [archive.backup2.Home]
 root = "/Volumes/SYNC_HOME_HDD4TB"
+# --（テスト用）「Home」フォルダーへバックアップ--
+#root = "/Volumes/SYNC_PREC_SSD4TB"
 
 [databases.backup.Home]
 root = "/Volumes/PAIS_HOME_HD10TB"
@@ -142,7 +153,7 @@ root = "/Volumes/Extreme SSD2"
 
 
 # ============================================================
-# 同期ルート（正本）
+# ＜＜＜＜＜＜同期ルート（正本）＞＞＞＞＞＞
 # - 用途（archive / databases）× location（Home / Prec / Portable）
 # - root は「物理root」を指し、実フォルダ名
 # archive / databasesを同期する時の同期元のバックアップ装置のrootを設定
