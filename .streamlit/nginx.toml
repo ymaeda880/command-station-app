@@ -46,5 +46,17 @@ sso_issuer = true  # 認証トークン発行
 port = 8592
 enabled = true     # 起動対象
 
+################
+
+[project_hub]
+port = 8508
+enabled = true     # 起動対象
+
+[rag_builder]
+port = 8509
+enabled = true     # 起動対象
+
+
+################
 
 # enabled = false    # 今回は無効化

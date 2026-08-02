@@ -524,6 +524,7 @@ def backup_sets(
 
         cmd_latest = rsync_base + rsync_excludes + [
             "--delete",
+            "--delete-excluded",
             f"{src}/",
             f"{latest}/",
         ]
