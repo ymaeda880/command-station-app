@@ -96,5 +96,14 @@ headless = true
     1. 「python仮想環境構築」より仮想環境を構築し，ライブラリーのインポートなどを行う．
             
     1. secrets.tomlの作成と設定
+
+
+注意事項
+---
+            
+- nginx.conf を自動生成・更新（変更）したら，  
+「（１）Nginxを確認．起動」の4番目の「reload(nginx -s reload）」を行う
+
+
 """)
 
