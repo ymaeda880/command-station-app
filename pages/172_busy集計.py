@@ -120,7 +120,7 @@ with st.sidebar:
                 SELECT run_id, started_at
                 FROM ai_runs
                 WHERE status = 'running'
-                  AND (julianday('now','localtime') - julianday(started_at)) >= (1.0/24)
+                    AND julianday(started_at) <= julianday('now', '-1 hour')           
                 ORDER BY started_at ASC
                 """
             )
@@ -137,13 +137,13 @@ with st.sidebar:
                     """
                     UPDATE ai_runs
                     SET
-                      status = 'error',
-                      finished_at = datetime('now','localtime'),
-                      elapsed_ms = CAST((julianday('now','localtime') - julianday(started_at)) * 86400000 AS INTEGER),
-                      error_type = 'forced_finish_over_1h',
-                      error_message = 'forced finish by admin (over 1h)'
+                        status = 'error',
+                        finished_at = strftime('%Y-%m-%dT%H:%M:%S', 'now', '+9 hours') || '+09:00',
+                        elapsed_ms = CAST((julianday('now') - julianday(started_at)) * 86400000 AS INTEGER),
+                        error_type = 'forced_finish_over_1h',
+                        error_message = 'forced finish by admin (over 1h)'
                     WHERE status = 'running'
-                      AND (julianday('now','localtime') - julianday(started_at)) >= (1.0/24)
+                        AND julianday(started_at) <= julianday('now', '-1 hour')
                     """
                 )
                 con.commit()
